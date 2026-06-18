@@ -1,0 +1,15 @@
+[package]
+name = "pinocchio-idl"
+version = "0.1.0"
+edition = "2024"
+
+[workspace]
+members = [
+    "crates/pinocchio-idl-core",
+    "crates/pinocchio-idl-macros",
+    "crates/pinocchio-idl-cli",
+    "crates/test-program"
+]
+resolver = "2"
+
+[dependencies]
