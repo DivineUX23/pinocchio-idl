@@ -23,36 +23,7 @@ pub fn p_instruction(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let mut injected_statement = Vec::new();
 
-    for account in parsed_attr.accounts {
-        let name = account.name;
-        if account.is_mut {
-            injected_statement.push(quote!{
-                if !#name.is_writable() {
-                    return Err(pinocchio::ProgramError::MissingRequiredSignature)
-                }
-            });
-        }
 
-        if account.is_signer {
-            injected_statement.push(quote!{
-                if !#name.is_signer() {
-                    return Err(pinocchio::ProgramError::MissingRequiredSignature)
-                }
-            });
-        }
-
-        if let Some(pda_seeds) = account.pda_seeds {
-            injected_statement.push(quote!{
-                let (expected_pda, _bump) = pinocchio::pubkey::Pubkey::find_program_address(
-                    &[#pda_seeds],
-                    program_id
-                );
-                if #name.key() != expected_pda {
-                    return Err(pinocchio::ProgramError::InvalidArgument)
-                }
-            });
-        }
-    }
 
     //if parsed_attr.data.is_some() {
     if let Some(data) = &parsed_attr.data {
@@ -82,9 +53,68 @@ pub fn p_instruction(attr: TokenStream, item: TokenStream) -> TokenStream {
     };
 
 
+    for account in parsed_attr.accounts {
+        let name = account.name;
+        if account.is_mut {
+            injected_statement.push(quote!{
+                if !#name.is_writable() {
+                    return Err(pinocchio::ProgramError::MissingRequiredSignature)
+                }
+            });
+        }
+
+        if account.is_signer {
+            injected_statement.push(quote!{
+                if !#name.is_signer() {
+                    return Err(pinocchio::ProgramError::MissingRequiredSignature)
+                }
+            });
+        }
+
+        /* */
+        if let Some(pda_seeds) = account.pda_seeds {
+            injected_statement.push(quote!{
+                let (expected_pda, _bump) = pinocchio::pubkey::Pubkey::find_program_address(
+                    &[#pda_seeds],
+                    program_id
+                );
+                if #name.key() != expected_pda {
+                    return Err(pinocchio::ProgramError::InvalidArgument)
+                }
+            });
+        }
+    }
+
+    /*
     for statement in injected_statement.into_iter() {
         let element = syn::parse_quote!(#statement);
         func.block.stmts.insert(0, element);
+    }
+    */
+
+    let all_injections = quote! {
+        #(#injected_statement)*
+    };
+
+    let injected_block: syn::Block = syn::parse_quote!({
+        #all_injections
+    });
+
+
+
+    let mut index = 0;
+
+    for (i, statement) in func.block.stmts.iter().enumerate() {
+        if let syn::Stmt::Local(_) = statement {
+            index = i + 1;
+        } else {
+            break;
+        }
+    }
+
+
+    for (i, statement) in injected_block.stmts.into_iter().enumerate() {
+        func.block.stmts.insert(index + i, statement);
     }
 
     TokenStream::from(quote!{
