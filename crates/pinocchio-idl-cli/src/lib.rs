@@ -1,14 +1,30 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
+use syn::{ str };
+
+pub struct Idl {
+    pub address: str,
+    pub metadata: Metadata,
+    pub instrcutions: Vec<Instructions>,
+    pub accounts: Accounts,
+    pub errors: Errors,
+    pub types: Types,
+    pub constants: Constants
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
+pub struct Metadata {
+
+}
+
+pub struct Instructions {
+    name: Indent,
+    discriminator: u8,
+    accounts: Vec<Accounts>,
+    args: Option<Vec<Args>>
+}
+
+pub struct Accounts {
+    pub name: Ident,
+    pub writable: bool,
+    pub signer: bool,
+    
 }

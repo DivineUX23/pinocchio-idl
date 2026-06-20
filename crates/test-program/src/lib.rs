@@ -16,8 +16,25 @@ pub type ProgramResult = Result<(), ()>;
 )]
 pub fn process(program_id: &pinocchio::pubkey::Pubkey, accounts: &[AccountView], data: &[u8]) -> ProgramResult {
     // User binds accounts manually
+    let [
+        contributor,
+        maker,
+        mint_to_raise,
+        fundraiser,
+        contributor_account,
+        contributor_ata,
+        vault,
+        _system_program,
+        _token_program,
+    ] = accounts 
+    else {
+        return Err(ProgramError::NotEnoughAccountKeys)
+    };
+
     let maker = &accounts[0];
     let escrow = &accounts[1];
+
+    let hmmmm = <u64>::from_le_bytes(data[0..8].try_into().unwrap());
 
     // User business logic here...
     Ok(())
