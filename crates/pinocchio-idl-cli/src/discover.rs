@@ -20,6 +20,7 @@ pub fn discover(src_dir: &Path) -> syn::Result<Discovery> {
     for path in walk_rs_files(src_dir) {
         let content = fs::read_to_string(&path)
             .map_err(|e| syn::Error::new(proc_macro2::Span::call_site(), format!("reading {}: {e}", path.display())))?;
+        
         let file = syn::parse_file(&content)
             .map_err(|e| syn::Error::new(proc_macro2::Span::call_site(), format!("parsing {}: {e}", path.display())))?;
         visit_items(&file.items, &mut discovery);

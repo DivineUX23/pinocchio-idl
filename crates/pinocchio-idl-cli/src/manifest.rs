@@ -1,5 +1,3 @@
-
-
 use serde::Deserialize;
 use std::path::Path;
 use std::fs;
@@ -18,10 +16,12 @@ struct CargoPackage {
 
 pub fn read_metadata(manifest_path: &Path) -> syn::Result<Metadata> {
     let content = fs::read_to_string(manifest_path).map_err(|e| {
+        
         syn::Error::new(
             proc_macro2::Span::call_site(),
             format!("reading {}: {e}", manifest_path.display()),
         )
+
     })?;
 
     let parsed: CargoToml = toml::from_str(&content).map_err(|e| {

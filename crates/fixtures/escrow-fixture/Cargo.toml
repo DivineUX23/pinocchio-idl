@@ -1,0 +1,11 @@
+# crates/fixtures/escrow-fixture/Cargo.toml
+[package]
+name = "escrow-fixture"
+version = "0.0.0"
+edition.workspace = true
+publish = false
+
+[dependencies]
+pinocchio = "0.11.2"
+pinocchio-pubkey = "0.3.0"
+pinocchio-idl-macros = { path = "../../pinocchio-idl-macros" }

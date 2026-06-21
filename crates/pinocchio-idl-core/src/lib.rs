@@ -558,8 +558,7 @@ fn is_pubkey_type(ty: &Type) -> bool {
 pub fn seed_class_to_tokens(class: &SeedClass, data_fields: &[Data]) -> syn::Result<TokenStream2> {
     Ok(match class {
         SeedClass::Bytes(bytes) => {
-            // re-emit as a byte-string literal — `b"escrow"` is `&[u8; N]`,
-            // which coerces to `&[u8]` in the `&[&[u8]]` seeds array.
+
             let lit = syn::LitByteStr::new(bytes, proc_macro2::Span::call_site());
 
             quote! { #lit }

@@ -23,18 +23,23 @@ fn main() {
     let cli = Cli::parse();
     match cli.command {
         Command::Build { manifest_path, out } => {
+            
             let src_dir = manifest_path.parent().unwrap_or(Path::new(".")).join("src");
+            
             let metadata = read_metadata(&manifest_path).unwrap_or_else(|e| {
                 eprintln!("{e}");
                 std::process::exit(1);
             });
+            
             let result = build_idl(&src_dir, metadata)
                 .map_err(|e| e.to_string())
                 .and_then(|idl| write_idl(&idl, &out).map_err(|e| e.to_string()));
+            
             if let Err(msg) = result {
                 eprintln!("{msg}");
                 std::process::exit(1);
             }
+            
             println!("wrote {}", out.display());
         }
     }

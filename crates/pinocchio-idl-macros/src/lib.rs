@@ -56,8 +56,7 @@ pub fn p_instruction(attr: TokenStream, item: TokenStream) -> TokenStream {
                     });
                 }
                 Some(DataSlice::Index(idx)) => {
-                    // a single-byte read is already the right width for u8 —
-                    // no from_le_bytes needed.
+
                     injected_statement.push(quote! {
                         let #name: #ty = data[#idx];
                     });
@@ -254,7 +253,7 @@ pub fn p_state(_attr: TokenStream, item: TokenStream) -> TokenStream {
         ).to_compile_error().into(),
     };
 
-    let mut space: usize = 8; // discriminator prefix
+    let mut space: usize = 8;
     for field in fields {
         space += match field_byte_size(&field.ty) {
             Ok(s) => s,

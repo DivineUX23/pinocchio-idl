@@ -11,10 +11,7 @@ use std::fs;
 use syn::Item;
 
 pub(crate) fn walk_rs_files(dir: &Path) -> Vec<PathBuf> {
-    // Scans every .rs file under src/ directly, rather than resolving the
-    // `mod foo;` tree properly — simpler, and it already covers multi-file
-    // programs since every file gets parsed independently regardless of how
-    // it's wired into the module tree.
+
     let mut files = Vec::new();
     let Ok(entries) = fs::read_dir(dir) else { return files };
 
@@ -46,7 +43,7 @@ pub(crate) fn visit_items(items: &[Item], discovery: &mut Discovery) {
                 }
             }
             Item::Macro(mac) => {
-                // declare_id!("...") — parse the string literal out of the body.
+
                 if mac.mac.path.is_ident("declare_id") {
                     if let Ok(lit) = mac.mac.parse_body::<syn::LitStr>() {
                         discovery.program_id = Some(lit.value());
@@ -54,8 +51,7 @@ pub(crate) fn visit_items(items: &[Item], discovery: &mut Discovery) {
                 }
             }
             Item::Mod(m) => {
-                // only matters for inline `mod foo { .. }` bodies — `mod foo;`
-                // pointing at another file is already covered by the file walk.
+
                 if let Some((_, inner)) = &m.content {
                     visit_items(inner, discovery);
                 }
