@@ -432,7 +432,7 @@ pub fn derive_instruction_name(ident: &Ident) -> String {
     ident.to_string()
 }
 
-
+/* 
 pub fn rust_type_to_idl_type(ty: &Type) -> syn::Result<String> {
     match ty {
         Type::Path(p) => {
@@ -447,6 +447,45 @@ pub fn rust_type_to_idl_type(ty: &Type) -> syn::Result<String> {
         other => Err(syn::Error::new_spanned(
             other,
             "unsupported data type in #[p_instruction(...)] — use a primitive or `Pubkey`",
+        ))
+    }
+}
+*/
+
+pub fn rust_type_to_idl_type(ty: &Type) -> syn::Result<String> {
+    match ty {
+
+        Type::Path(p) => {
+            let ident = p.path.segments.last().ok_or_else(|| syn::Error::new_spanned(p, "empty type path"))?
+                .ident.to_string();
+
+            Ok(match ident.as_str() {
+                "Pubkey" | "Address" => "pubkey".to_string(),
+                other => other.to_string(),
+            })
+        }
+        
+
+        Type::Array(arr) => {
+            let elem_type = rust_type_to_idl_type(&arr.elem)?;
+            let len = match &arr.len {
+                syn::Expr::Lit(syn::ExprLit { lit: syn::Lit::Int(n), .. }) => n.base10_parse::<usize>()?,
+                _ => return Err(syn::Error::new_spanned(&arr.len, "array length must be a literal integer")),
+            };
+
+            if elem_type == "u8" && len == 32 {
+                Ok("pubkey".to_string())
+            } else if elem_type == "u8" {
+                Ok("bytes".to_string())
+            } else {
+                Ok(format!("[{}; {}]", elem_type, len))
+            }
+        }
+
+
+        other => Err(syn::Error::new_spanned(
+            other,
+            "unsupported data type in #[p_instruction(...)] or #[p_state] — use a primitive or `Pubkey`",
         ))
     }
 }

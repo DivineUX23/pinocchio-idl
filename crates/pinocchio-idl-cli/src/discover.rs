@@ -1,5 +1,5 @@
-use std::{fs, path::{Path, PathBuf}};
-use syn::{Item, ItemFn, ItemStruct};
+use std::{fs, path::Path};
+use syn::{ItemFn, ItemStruct};
 use crate::{walk_rs_files, visit_items};
 
 pub struct DiscoveredInstruction {

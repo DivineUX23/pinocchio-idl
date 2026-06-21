@@ -1,5 +1,4 @@
 extern crate proc_macro;
-//use pinocchio::account;
 use proc_macro2::{TokenStream as TokenStream2};
 use proc_macro::TokenStream;
 use quote::quote;
@@ -79,7 +78,7 @@ pub fn p_instruction(attr: TokenStream, item: TokenStream) -> TokenStream {
         if account.is_mut {
             injected_statement.push(quote!{
                 if !#name.is_writable() {
-                    return Err(pinocchio::ProgramError::MissingRequiredSignature)
+                    return Err(ProgramError::MissingRequiredSignature)
                 }
             });
         }
@@ -87,13 +86,13 @@ pub fn p_instruction(attr: TokenStream, item: TokenStream) -> TokenStream {
         if account.is_signer {
             injected_statement.push(quote!{
                 if !#name.is_signer() {
-                    return Err(pinocchio::ProgramError::MissingRequiredSignature)
+                    return Err(ProgramError::MissingRequiredSignature)
                 }
             });
         }
 
 
-
+        /* Disabled for now
         if let Some(pda_seeds) = &account.pda_seeds {
             let seed_classes: Vec<_> = match pda_seeds.0.iter()
                 .map(|expr| classify_seed(expr, &account_names, &arg_names))
@@ -122,16 +121,17 @@ pub fn p_instruction(attr: TokenStream, item: TokenStream) -> TokenStream {
             };
 
             injected_statement.push(quote! {
-                let expected_pda = pinocchio::pubkey::Pubkey::create_program_address(
+                let expected_pda = pubkey::Pubkey::create_program_address(
                     &[#(#seed_tokens),*, &[#bump_ident]],
                     program_id,
-                ).map_err(|_| pinocchio::ProgramError::InvalidArgument)?;
+                ).map_err(|_| ProgramError::InvalidArgument)?;
 
                 if #name.key() != expected_pda {
-                    return Err(pinocchio::ProgramError::InvalidArgument);
+                    return Err(ProgramError::InvalidArgument);
                 }
             });
         }
+        */
     }
 
     let all_injections = quote! {
@@ -170,7 +170,7 @@ pub fn p_instruction(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let bounds_check: syn::Stmt = syn::parse_quote! {
         if #account_ident.len() < #required {
-            return Err(pinocchio::ProgramError::NotEnoughAccountKeys);
+            return Err(ProgramError::NotEnoughAccountKeys);
         }
     };
     func.block.stmts.insert(0, bounds_check);
