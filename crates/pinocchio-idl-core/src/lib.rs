@@ -1,20 +1,10 @@
-/*
-#[p_instruction(
-    accounts = [
-        maker(signer),
-        escrow(mut, pda=["escrow", maker, seed], state=EscrowState)
-    ]
-    data = [
-       seed: u64 = data[0..8],
-       amount: u64 = data[8..16]
-    ]
-)]
-    user ( mut , signer , pda = [b"user", user_key.as_ref()] , state = UserState )
-*/
-
 use proc_macro2::{TokenStream as TokenStream2};
 use quote::ToTokens;
-use syn::{Expr, FnArg, Ident, Pat, Stmt, Signature, LitInt, Token, bracketed, parse::{Parse, ParseStream}, Type};
+use syn::{Expr, FnArg, Ident, Lit, Pat, Stmt, Signature, LitInt, Token, bracketed, parse::{Parse, ParseStream}, Type};
+use quote::quote;
+
+pub mod cli_struct;
+pub use cli_struct::*;
 
 #[derive(Debug)]
 pub struct Instruction {
@@ -102,6 +92,28 @@ impl Instruction {
         //Instruction
 
     }
+
+    pub fn into_idl(&self, name: String, index: u8) -> syn::Result<IdlInstruction> {
+        let account_names: Vec<String> = self.accounts.iter().map(|a| a.name.to_string()).collect();
+
+        let arg_names: Vec<String> = self.data.as_ref().map(|fields| fields.iter().map(|f| f.name.to_string()).collect())
+            .unwrap_or_default();
+
+        let accounts = self.accounts.iter().map(|acc| acc.into_idl(&account_names, &arg_names))
+            .collect::<syn::Result<Vec<_>>>()?;
+
+        let args = self.data.as_ref().map(|fields| fields.iter().map(Data::into_idl_arg).collect::<syn::Result<Vec<_>>>())
+            .transpose()?;
+
+        Ok(IdlInstruction {
+            name,
+            discriminator: vec![self.id.unwrap_or(index)],
+            accounts,
+            args
+        })
+    }
+
+
 }
 
 
@@ -112,6 +124,8 @@ pub struct Account {
     pub is_mut: bool,
     pub pda_seeds: Option<Seed>,
     pub struct_state: Option<Ident>,
+    pub address: Option<syn::LitStr>,
+    pub relations: Vec<Ident>,
 }
 
 impl Parse for Account {
@@ -122,6 +136,8 @@ impl Parse for Account {
         let mut is_mut = false;
         let mut pda_seeds = None;
         let mut struct_state = None;
+        let mut address = None;
+        let mut relations = Vec::new();
 
         if input.peek(syn::token::Paren) {
 
@@ -152,6 +168,18 @@ impl Parse for Account {
                         content.parse::<Token![=]>()?;
                         struct_state = Some(content.parse::<Ident>()?);
                     }
+                    "address" => {
+                        content.parse::<Token![=]>()?;
+                        address = Some(content.parse::<syn::LitStr>()?);
+                    }
+                    "relations" => {
+                        content.parse::<Token![=]>()?;
+                        let inner;
+                        syn::bracketed!(inner in content);
+                        let idents = inner.parse_terminated(Ident::parse, Token![,])?;
+                        relations = idents.into_iter().collect();
+                    }
+
                     other => {
                         return Err(syn::Error::new (
                             ident.span(),
@@ -169,7 +197,7 @@ impl Parse for Account {
 
         }
 
-        Ok(Account { name, is_signer, is_mut, pda_seeds, struct_state })
+        Ok(Account { name, is_signer, is_mut, pda_seeds, struct_state, address, relations })
 
     }
 }
@@ -182,15 +210,37 @@ impl Account {
             is_mut: false,
             pda_seeds: None,
             struct_state: None,
+            address: None,
+            relations: Vec::new(),
         }
     }
+
+
+    pub fn into_idl(&self, account_names: &[String], arg_names: &[String]) -> syn::Result<IdlAccount> {
+        let pda_seeds = self.pda_seeds.as_ref()
+            .map(|seed| seed.into_idl(account_names, arg_names))
+            .transpose()?;
+
+        Ok(IdlAccount {
+            name: self.name.to_string().trim_start_matches('_').to_string(),
+            writable: self.is_mut,
+            signer: self.is_signer,
+            address: self.address.as_ref().map(|lit| lit.value()),
+            relations: (!self.relations.is_empty())
+                .then(|| self.relations.iter().map(|r| r.to_string()).collect()),
+            pda_seeds,
+            state: self.struct_state.as_ref().map(|s| s.to_string()),
+        })
+    }
+
+
 }
 
 
 
 
 #[derive(Debug)]
-pub struct Seed(Vec<Expr>);
+pub struct Seed(pub Vec<Expr>);
 
 impl Parse for Seed {
     fn parse(input: ParseStream) -> syn::Result<Self> {
@@ -218,6 +268,76 @@ impl ToTokens for Seed {
     }
 }
 
+impl Seed {
+    pub fn into_idl(&self, account_names: &[String], arg_names: &[String]) -> syn::Result<IdlPda> {
+        let seeds = self.0.iter().map(|expr| seed_expr_to_idl(expr, account_names, arg_names)).collect::<syn::Result<Vec<_>>>()?;
+
+        Ok(IdlPda { seeds, program: None })
+    }
+}
+
+
+
+
+#[derive(Debug)]
+pub enum SeedClass {
+    Bytes(Vec<u8>),
+    Account(Ident),
+    Arg(Ident)
+}
+
+pub fn classify_seed(
+    expr: &Expr,
+    account_names: &[String],
+    arg_names: &[String],
+) -> syn::Result<SeedClass> {
+    match strip(expr) {
+        Expr::Lit(lit) => match &lit.lit {
+
+            Lit::Str(s) => Ok(SeedClass::Bytes(s.value().into_bytes())),
+            Lit::ByteStr(b) => Ok(SeedClass::Bytes(b.value())),
+
+            other => Err(syn::Error::new_spanned(
+                other, "pda seed literal must be a string or byte string",
+            )),
+        }, 
+
+        Expr::Path(p) => {
+            let ident = p.path.get_ident().ok_or_else(|| {
+                syn::Error::new_spanned(p, "pda seed path must be a single identifier")
+            })?;
+
+            let name = ident.to_string();
+
+            if account_names.iter().any(|a| a == &name) {
+                Ok(SeedClass::Account(ident.clone()))
+
+            } else if arg_names.iter().any(|a| a == &name) {
+                Ok(SeedClass::Arg(ident.clone()))
+
+            } else {
+                Err(syn::Error::new_spanned(
+                    p, format!("seed `{name}` doesn't match any declared account or data field"),
+                ))
+            }
+        }
+        other => Err(syn::Error::new_spanned(
+            other, "pda seed must be a string/byte-string literal or an identifier",
+        )),  
+
+    }
+}
+
+
+
+
+
+#[derive(Debug)]
+pub enum DataSlice {
+    Range(syn::ExprRange),
+    Index(syn::Expr)
+}
+
 
 #[derive(Debug)]
 pub struct Data {
@@ -226,7 +346,7 @@ pub struct Data {
     //pub slice_start: Option<usize>,
     //pub slice_end: Option<usize>
 
-    pub slice: Option<syn::ExprRange>
+    pub slice: Option<DataSlice>
 }
 
 
@@ -249,8 +369,15 @@ impl Parse for Data {
             if ident.to_string().as_str() == "data" {
                 let content;
                 syn::bracketed!( content in input);
-                let range: syn::ExprRange = content.parse()?;
-                slice = Some(range);
+                //let range: syn::ExprRange = content.parse()?;
+                //slice = Some(range);
+
+                slice = Some(if content.fork().parse::<syn::ExprRange>().is_ok() {
+                    DataSlice::Range(content.parse()?)
+                } else {
+                    DataSlice::Index(content.parse::<syn::Expr>()?)
+
+                });
 
                 //slice_start = Some(content.parse());
                 //content.parse::<Token![..]>()?;
@@ -268,6 +395,18 @@ impl Parse for Data {
 }
 
 
+impl Data {
+    pub fn into_idl_arg(&self) -> syn::Result<IdlArg> {
+        Ok(IdlArg {
+            name: self.name.to_string(),
+            r#type: rust_type_to_idl_type(&self.ty)?,
+        })
+    }
+}
+
+
+
+
 pub struct State {
     pub name: Ident,
     pub fields: Vec<Fields>
@@ -282,6 +421,129 @@ pub struct Fields {
 
 
 ///Helper:
+
+pub fn account_discriminator(struct_name: &str) -> [u8; 8] {
+    use sha2::{Digest, Sha256};
+    let preimage = format!("account:{struct_name}");
+    Sha256::digest(preimage.as_bytes())[..8].try_into().unwrap()
+}
+
+pub fn derive_instruction_name(ident: &Ident) -> String {
+    ident.to_string()
+}
+
+
+pub fn rust_type_to_idl_type(ty: &Type) -> syn::Result<String> {
+    match ty {
+        Type::Path(p) => {
+            let ident = p.path.segments.last().ok_or_else(|| syn::Error::new_spanned(p, "empty type path"))?
+                .ident.to_string();
+
+            Ok(match ident.as_str() {
+                "Pubkey" => "pubkey".to_string(),
+                other => other.to_string(),
+            })
+        }
+        other => Err(syn::Error::new_spanned(
+            other,
+            "unsupported data type in #[p_instruction(...)] — use a primitive or `Pubkey`",
+        ))
+    }
+}
+
+
+
+/*
+fn seed_expr_to_idl(
+    expr: &Expr,
+    accounts_name: &[String],
+    arg_name: &[String]
+) -> syn::Result<IdlPdaSeed> {
+    match strip(expr) {
+        Expr::Lit(lit) => match &lit.lit {
+            //             Lit::Str(s) => Ok(IdlPdaSeed::Const { value: s.value().into_bytes() }),
+            Lit::Str(s) => Ok(IdlPdaSeed::Const { value: s.value().to_le_bytes }),
+            Lit::ByteStr(b) => Ok(IdlPdaSeed::Const { value: b.value() }),
+            other => Err(syn::Error::new_spanned(
+                other, "pda seed literal must be a string or byte string",
+            )),
+        },
+
+
+        Expr::Path(p) => {
+            let ident = p.path.get_ident().ok_or_else(|| {
+                syn::Error::new_spanned(p, "pda seed path must be a single identifier")
+            })?;
+            let name = ident.to_string();
+
+            if accounts_name.iter().any(|a| a == &name) {
+                Ok(IdlPdaSeed::Account { path: name, account: None})
+            } else if arg_name.iter().any(|a| a == &name) {
+                Ok(IdlPdaSeed::Arg { path: name })
+            } else {
+                Err(syn::Error::new_spanned(
+                    p,
+                    format!("seed `{name}` doesn't match any declared account or data field"),
+                ))
+            }
+        }
+        other => Err(syn::Error::new_spanned(
+            other, "pda seed must be a string/byte-string literal or an identifier",
+        )),
+    }
+}
+*/
+
+
+
+fn seed_expr_to_idl(
+    expr: &Expr,
+    account_names: &[String],
+    arg_names: &[String]
+) -> syn::Result<IdlPdaSeed> {
+
+    Ok(match classify_seed(expr, account_names, arg_names)? {
+        SeedClass::Bytes(value) => IdlPdaSeed::Const { value },
+        SeedClass::Account(ident) => IdlPdaSeed::Account { path: ident.to_string(), account: None },
+        SeedClass::Arg(ident) => IdlPdaSeed::Arg { path: ident.to_string() },
+    })
+
+}
+
+
+
+fn is_pubkey_type(ty: &Type) -> bool {
+    matches!(ty, Type::Path(p) if p.path.is_ident("Pubkey"))
+}
+
+pub fn seed_class_to_tokens(class: &SeedClass, data_fields: &[Data]) -> syn::Result<TokenStream2> {
+    Ok(match class {
+        SeedClass::Bytes(bytes) => {
+            // re-emit as a byte-string literal — `b"escrow"` is `&[u8; N]`,
+            // which coerces to `&[u8]` in the `&[&[u8]]` seeds array.
+            let lit = syn::LitByteStr::new(bytes, proc_macro2::Span::call_site());
+
+            quote! { #lit }
+        }
+        SeedClass::Account(ident) => quote! { #ident.key().as_ref() },
+
+        SeedClass::Arg(ident) => {
+            let field = data_fields.iter()
+                .find(|f| &f.name == ident)
+                .ok_or_else(|| syn::Error::new_spanned(
+                    ident, "internal: arg seed not found among data fields",
+                ))?;
+
+            if is_pubkey_type(&field.ty) {
+                quote! { #ident.as_ref() }
+            } else {
+                quote! { &#ident.to_le_bytes() }
+            }
+        }
+    })
+}
+
+
 
 pub fn find_accounts_param(sig: &Signature) -> syn::Result<Ident> {
     for arg in &sig.inputs {
@@ -307,7 +569,7 @@ pub fn find_accounts_param(sig: &Signature) -> syn::Result<Ident> {
 
 
 /// Accounts.Parse the list of binded accounts and scan their results to ensure they don't... 
-/// already appear in the list of instruction.acconts the add them to ths list of instruction.accounts
+/// already appear in the list of instruction.accounts the add them to ths list of instruction.accounts
 
 pub fn add_accounts(stmts: &[Stmt], accounts_param: &str, instruction: &mut Instruction) {
 
@@ -326,6 +588,8 @@ pub fn add_accounts(stmts: &[Stmt], accounts_param: &str, instruction: &mut Inst
             is_mut: false,
             pda_seeds: None,
             struct_state: None,
+            address: None,
+            relations: Vec::new(),
     }).collect();
 
     instruction.accounts.extend(other_accounts);

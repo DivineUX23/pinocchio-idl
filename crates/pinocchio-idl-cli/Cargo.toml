@@ -3,4 +3,21 @@ name = "pinocchio-idl-cli"
 version = "0.1.0"
 edition = "2024"
 
+
+[lib]
+name = "pinocchio_idl_cli"
+path = "src/lib.rs"
+
+[[bin]]
+name = "pinocchio-idl"
+path = "src/main.rs"
+
+
 [dependencies]
+syn = { workspace = true }
+proc-macro2 = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
+clap = { workspace = true }
+pinocchio-idl-core = { path = "../pinocchio-idl-core" }

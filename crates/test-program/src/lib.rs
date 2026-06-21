@@ -8,10 +8,13 @@ pub type ProgramResult = Result<(), ()>;
     id = 1,
     accounts = [
         maker(signer),
-        escrow(mut, pda=[b"escrow", maker.key().as_ref(), &seed.to_le_bytes()], state=EscrowState)
+        escrow(mut, pda=[b"escrow", maker, seed], state=EscrowState),
+        maker_ata(mut, pda=[maker, token_program, maker], state=EscrowState),
+        token_program
     ],
     data = [
-        seed: u64 = data[0..8]
+        seed: u64 = data[0..8],
+        bump: u8 = data[8]
     ]
 )]
 pub fn process(program_id: &pinocchio::pubkey::Pubkey, accounts: &[AccountView], data: &[u8]) -> ProgramResult {
@@ -24,8 +27,6 @@ pub fn process(program_id: &pinocchio::pubkey::Pubkey, accounts: &[AccountView],
         contributor_account,
         contributor_ata,
         vault,
-        _system_program,
-        _token_program,
     ] = accounts 
     else {
         return Err(ProgramError::NotEnoughAccountKeys)

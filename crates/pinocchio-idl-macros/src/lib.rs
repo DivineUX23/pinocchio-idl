@@ -1,9 +1,10 @@
 extern crate proc_macro;
 //use pinocchio::account;
+use proc_macro2::{TokenStream as TokenStream2};
 use proc_macro::TokenStream;
 use quote::quote;
-use pinocchio_idl_core::{Instruction, find_accounts_param};
-use syn::{Expr, ItemFn, Pat, Stmt, parse_macro_input};
+use pinocchio_idl_core::{Instruction, seed_class_to_tokens, find_accounts_param, classify_seed, account_discriminator, DataSlice};
+use syn::{Expr, ItemFn, Pat, Stmt, Ident, parse_macro_input, ItemStruct, Fields, Type, ExprLit, Lit};
 
 /*
 pub mod program_error {
@@ -25,6 +26,20 @@ pub fn p_instruction(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut injected_statement = Vec::new();
 
 
+    let required = parsed_attr.accounts.len();
+
+    let account_names: Vec<String> = parsed_attr.accounts.iter()
+        .map(|a| a.name.to_string())
+        .collect();
+
+    let arg_names: Vec<String> = parsed_attr.data.as_ref()
+        .map(|fields| fields.iter().map(|f| f.name.to_string()).collect())
+        .unwrap_or_default();
+
+    let bump_field: Option<Ident> = parsed_attr.data.as_ref()
+        .and_then(|fields| fields.iter().find(|d| d.name == "bump"))
+        .map(|d| d.name.clone());
+
 
     //if parsed_attr.data.is_some() {
     if let Some(data) = &parsed_attr.data {
@@ -33,29 +48,34 @@ pub fn p_instruction(attr: TokenStream, item: TokenStream) -> TokenStream {
             let name = &data_args.name;
             let ty = &data_args.ty;
 
-            if let Some(slice) = &data_args.slice {
-
-                let start = &slice.start;
-                let end = &slice.end;
-
-                injected_statement.push(quote!{
-                    let #name = <#ty>::from_le_bytes(data[#start..#end].try_into().unwrap());
-                    }
-                );
-            } else {
-
-                injected_statement.push(quote!{
-                    let #name = #ty;
-                    }
-                )
+            match &data_args.slice {
+                Some(DataSlice::Range(range)) => {
+                    let start = &range.start;
+                    let end = &range.end;
+                    injected_statement.push(quote! {
+                        let #name = <#ty>::from_le_bytes(data[#start..#end].try_into().unwrap());
+                    });
+                }
+                Some(DataSlice::Index(idx)) => {
+                    // a single-byte read is already the right width for u8 —
+                    // no from_le_bytes needed.
+                    injected_statement.push(quote! {
+                        let #name: #ty = data[#idx];
+                    });
+                }
+                None => {
+                    injected_statement.push(quote! {
+                        let #name = #ty;
+                    });
+                }
             }
         }
-
-    };
+    }
 
 
     for account in parsed_attr.accounts {
         let name = account.name;
+
         if account.is_mut {
             injected_statement.push(quote!{
                 if !#name.is_writable() {
@@ -72,26 +92,47 @@ pub fn p_instruction(attr: TokenStream, item: TokenStream) -> TokenStream {
             });
         }
 
-        /* */
-        if let Some(pda_seeds) = account.pda_seeds {
-            injected_statement.push(quote!{
-                let (expected_pda, _bump) = pinocchio::pubkey::Pubkey::find_program_address(
-                    &[#pda_seeds],
-                    program_id
-                );
+
+
+        if let Some(pda_seeds) = &account.pda_seeds {
+            let seed_classes: Vec<_> = match pda_seeds.0.iter()
+                .map(|expr| classify_seed(expr, &account_names, &arg_names))
+                .collect()
+            {
+                Ok(c) => c,
+                Err(e) => return e.to_compile_error().into(),
+            };
+
+            let seed_tokens: Vec<TokenStream2> = match seed_classes.iter()
+                .map(|class| seed_class_to_tokens(class, parsed_attr.data.as_deref().unwrap_or(&[])))
+                .collect()
+            {
+                Ok(t) => t,
+                Err(e) => return e.to_compile_error().into(),
+            };
+
+            let bump_ident = match &bump_field {
+                Some(ident) => ident,
+                None => {
+                    return syn::Error::new_spanned(
+                        &name,
+                        "pda verification requires a `bump: u8 = data[N]` field in `data = [...]`",
+                    ).to_compile_error().into();
+                }
+            };
+
+            injected_statement.push(quote! {
+                let expected_pda = pinocchio::pubkey::Pubkey::create_program_address(
+                    &[#(#seed_tokens),*, &[#bump_ident]],
+                    program_id,
+                ).map_err(|_| pinocchio::ProgramError::InvalidArgument)?;
+
                 if #name.key() != expected_pda {
-                    return Err(pinocchio::ProgramError::InvalidArgument)
+                    return Err(pinocchio::ProgramError::InvalidArgument);
                 }
             });
         }
     }
-
-    /*
-    for statement in injected_statement.into_iter() {
-        let element = syn::parse_quote!(#statement);
-        func.block.stmts.insert(0, element);
-    }
-    */
 
     let all_injections = quote! {
         #(#injected_statement)*
@@ -127,6 +168,14 @@ pub fn p_instruction(attr: TokenStream, item: TokenStream) -> TokenStream {
         func.block.stmts.insert(index + i, statement);
     }
 
+    let bounds_check: syn::Stmt = syn::parse_quote! {
+        if #account_ident.len() < #required {
+            return Err(pinocchio::ProgramError::NotEnoughAccountKeys);
+        }
+    };
+    func.block.stmts.insert(0, bounds_check);
+
+
     TokenStream::from(quote!{
         #func
     })
@@ -160,7 +209,7 @@ fn count_account_binding(stmts: &[Stmt], accounts_param: &str) -> usize {
 
     for (i, stmt) in stmts.iter().enumerate() {
         if let Stmt::Local(local) = stmt {
-            if let Pat::Slice(slice) = &local.pat {
+            if let Pat::Slice(_slice) = &local.pat {
                 if let Some(init) = &local.init {
                     if is_path_ident(&init.expr, accounts_param) {
                         //return slice.elems.iter().filter(|p| !matches!(p, Pat::Rest(_))).count();
@@ -191,4 +240,73 @@ fn count_account_binding(stmts: &[Stmt], accounts_param: &str) -> usize {
     index
 }
 
-//fn is_
+
+
+
+#[proc_macro_attribute]
+pub fn p_state(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let item_struct = parse_macro_input!(item as ItemStruct);
+
+    let fields = match &item_struct.fields {
+        Fields::Named(named) => &named.named,
+        _ => return syn::Error::new_spanned(
+            &item_struct, "#[p_state] requires a struct with named fields",
+        ).to_compile_error().into(),
+    };
+
+    let mut space: usize = 8; // discriminator prefix
+    for field in fields {
+        space += match field_byte_size(&field.ty) {
+            Ok(s) => s,
+            Err(e) => return e.to_compile_error().into(),
+        };
+    }
+
+    let struct_name = &item_struct.ident;
+    let discriminator = account_discriminator(&struct_name.to_string());
+    let disc_bytes = discriminator.iter().map(|b| quote! { #b });
+
+    TokenStream::from(quote! {
+        #item_struct
+
+        impl #struct_name {
+            pub const SPACE: usize = #space;
+            pub const DISCRIMINATOR: [u8; 8] = [#(#disc_bytes),*];
+        }
+    })
+}
+
+fn field_byte_size(ty: &Type) -> syn::Result<usize> {
+    match ty {
+        Type::Path(p) => {
+            let ident = p.path.segments.last()
+                .ok_or_else(|| syn::Error::new_spanned(p, "empty type path"))?
+                .ident.to_string();
+            match ident.as_str() {
+                "u8" | "i8" | "bool" => Ok(1),
+                "u16" | "i16" => Ok(2),
+                "u32" | "i32" => Ok(4),
+                "u64" | "i64" => Ok(8),
+                "u128" | "i128" => Ok(16),
+                "Pubkey" => Ok(32),
+                other => Err(syn::Error::new_spanned(
+                    p, format!("#[p_state] doesn't know the size of `{other}` — \
+                                use an integer, bool, Pubkey, or fixed-size array"),
+                )),
+            }
+        }
+        Type::Array(arr) => {
+            let elem_size = field_byte_size(&arr.elem)?;
+            let len: usize = match &arr.len {
+                Expr::Lit(ExprLit { lit: Lit::Int(n), .. }) => n.base10_parse()?,
+                other => return Err(syn::Error::new_spanned(
+                    other, "array length must be an integer literal",
+                )),
+            };
+            Ok(elem_size * len)
+        }
+        other => Err(syn::Error::new_spanned(
+            other, "unsupported field type for #[p_state]",
+        )),
+    }
+}
