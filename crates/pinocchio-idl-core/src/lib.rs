@@ -598,7 +598,7 @@ pub fn find_accounts_param(sig: &Signature) -> syn::Result<Ident> {
         &sig.ident, 
         format!(
             "`{}` must take a parameter literally named `accounts` \
-             (e.g. `accounts: &[AccountView]`) — account bindings are located \
+             (e.g. `accounts: &[AccountView]`), account bindings are located \
              by this exact name, regardless of position or type",
             sig.ident
         ),
