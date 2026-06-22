@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # PinIDL
 
 **Anchor-compatible IDL generation and security validation for raw [Pinocchio](https://github.com/febo/pinocchio) programs — zero runtime overhead, zero framework wrappers.**
@@ -46,6 +47,103 @@ use pinocchio_idl_macros::p_state;
 
 #[p_state]
 pub struct EscrowState {
+=======
+# pinocchio-idl
+
+**IDL generation tooling for [Pinocchio](https://github.com/febo/pinocchio) Solana programs.**
+
+`pinocchio-idl` brings Anchor-compatible IDL generation to the Pinocchio ecosystem — without pulling in Anchor itself. Annotate your Pinocchio instruction handlers and account state structs with a pair of proc-macro attributes, run one CLI command, and get a fully-structured `idl.json` that any Anchor-compatible client (TypeScript, Rust, etc.) can consume.
+
+> **Status:** Beta / Capstone project. Not yet published to crates.io — install directly from GitHub (see below).
+
+---
+
+## Features
+
+- **`#[p_instruction(...)]`** — Annotate instruction handler functions to declare accounts (writable, signer, PDA seeds, relations, fixed addresses) and instruction data (byte-slice extraction).
+- **`#[p_state]`** — Annotate account state structs to auto-derive `SPACE` and an Anchor-compatible 8-byte `DISCRIMINATOR`.
+- **`pinocchio-idl build`** — CLI command that statically analyzes your program source, discovers all annotated items, and emits a structured `idl.json`.
+- Zero runtime overhead — all macro work happens at compile time; the CLI is a pure static analysis tool.
+
+---
+
+## Workspace Layout
+
+```
+pinocchio-idl/
+├── crates/
+│   ├── pinocchio-idl-core/      # Shared parsing types & IDL structs
+│   ├── pinocchio-idl-macros/    # Proc-macro crate (#[p_instruction], #[p_state])
+│   ├── pinocchio-idl-cli/       # CLI binary (pinocchio-idl build)
+│   └── fixtures/
+│       └── escrow-fixture/      # Example Pinocchio program using the macros
+└── Cargo.toml                   # Workspace root
+```
+
+
+---
+
+## Architecture Diagram
+
+
+![alt text](image.png)
+
+
+---
+
+## Installation
+
+### CLI — `pinocchio-idl build`
+
+Install the binary directly from GitHub (no crates.io required):
+
+```bash
+cargo install --git https://github.com/DivineUX23/pinocchio-idl.git pinocchio-idl-cli
+```
+
+Cargo will clone the repo, compile the `pinocchio-idl-cli` crate, and place the `pinocchio-idl` binary on your `PATH`.
+
+Verify the install:
+
+```bash
+pinocchio-idl --version
+```
+
+---
+
+## Usage
+
+### 1. Add the macro dependency to your Pinocchio program
+
+In your program's `Cargo.toml`, point directly at this GitHub repository:
+
+```toml
+[dependencies]
+pinocchio-idl-macros = { git = "https://github.com/DivineUX23/pinocchio-idl.git" }
+```
+
+To pin to a specific branch or commit for reproducible builds:
+
+```toml
+pinocchio-idl-macros = { git = "https://github.com/DivineUX23/pinocchio-idl.git", branch = "main" }
+# or
+pinocchio-idl-macros = { git = "https://github.com/DivineUX23/pinocchio-idl.git", rev = "<commit-sha>" }
+```
+
+---
+
+### 2. Annotate your program
+
+#### `#[p_state]` — Account state struct
+
+Decorate any named-field struct to get a compile-time `SPACE` constant and an Anchor-compatible `DISCRIMINATOR`:
+
+```rust
+use pinocchio_idl_macros::p_state;
+
+#[p_state]
+pub struct Escrow {
+>>>>>>> 431b462 (readme updated)
     pub seed:    u64,
     pub maker:   Pubkey,
     pub mint_a:  Pubkey,
@@ -53,6 +151,7 @@ pub struct EscrowState {
     pub receive: u64,
     pub bump:    u8,
 }
+<<<<<<< HEAD
 
 // PinIDL generates these automatically — use them anywhere in your program:
 // EscrowState::SPACE         → 121 (8 discriminator prefix + field sizes)
@@ -80,17 +179,46 @@ Add `#[p_instruction(...)]` above each instruction function. Declare every const
 use pinocchio::{AccountView, ProgramResult, error::ProgramError};
 use pinocchio_idl_macros::p_instruction;
 use crate::state::EscrowState;
+=======
+```
+
+This expands to:
+
+```rust
+impl Escrow {
+    pub const SPACE: usize = 8 + 8 + 32 + 32 + 32 + 8 + 1; // 8-byte discriminator + fields
+    pub const DISCRIMINATOR: [u8; 8] = [/* sha256("account:Escrow")[..8] */];
+}
+```
+
+Supported field types: `u8`, `i8`, `bool`, `u16`, `i16`, `u32`, `i32`, `u64`, `i64`, `u128`, `i128`, `Pubkey`, and fixed-size arrays thereof.
+
+---
+
+#### `#[p_instruction(...)]` — Instruction handler
+
+Annotate your handler function to declare its accounts and data layout:
+
+```rust
+use pinocchio_idl_macros::p_instruction;
+>>>>>>> 431b462 (readme updated)
 
 #[p_instruction(
     id = 0,
     accounts = [
         maker(signer, mut),
+<<<<<<< HEAD
         mint_a,
         mint_b,
         escrow(mut, pda = ["escrow", maker, seed], state = EscrowState),
         vault(mut),
         token_program(address = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"),
         system_program(address = "11111111111111111111111111111111")
+=======
+        escrow(mut, pda = ["escrow", maker, seed], state = Escrow),
+        vault(mut, relations = [escrow, mint_a]),
+        token_program(address = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
+>>>>>>> 431b462 (readme updated)
     ],
     data = [
         seed:    u64 = data[0..8],
@@ -99,6 +227,7 @@ use crate::state::EscrowState;
     ]
 )]
 pub fn process_make_instruction(accounts: &[AccountView], data: &[u8]) -> ProgramResult {
+<<<<<<< HEAD
     // Bind accounts however you normally would — slice destructuring or indexing,
     // both work fine:
     let [maker, mint_a, mint_b, escrow, vault, _token_program, _system_program] = accounts else {
@@ -125,10 +254,17 @@ pub fn process_make_instruction(accounts: &[AccountView], data: &[u8]) -> Progra
     escrow_state.set_receive(receive);
     escrow_state.set_bump(bump);
 
+=======
+    let [maker, mint_a, mint_b, escrow, vault, token_program] = accounts else {
+        return Err(ProgramError::NotEnoughAccountKeys)
+    };
+    // ... your logic
+>>>>>>> 431b462 (readme updated)
     Ok(())
 }
 ```
 
+<<<<<<< HEAD
 What PinIDL silently injects above your code:
 
 ```rust
@@ -349,12 +485,167 @@ cargo install --git https://github.com/DivineUX23/pinocchio-idl pinocchio-idl-cl
 ```toml
 [dependencies]
 pinocchio-idl-macros = { git = "https://github.com/DivineUX23/pinocchio-idl" }
+=======
+**Account constraint reference:**
+
+| Constraint | Syntax | Effect |
+|---|---|---|
+| Writable | `mut` | Validates `account.is_writable()` at runtime |
+| Signer | `signer` | Validates `account.is_signer()` at runtime |
+| PDA seeds | `pda = ["literal", account_name, arg_name]` | Recorded in IDL for client-side PDA derivation |
+| Linked state | `state = StructName` | Associates an account with its `#[p_state]` type |
+| Fixed address | `address = "Base58..."` | Records a known program/sysvar address in the IDL |
+| Relations | `relations = [other, another]` | Records account relationships in the IDL |
+
+**Data field syntax:** `field_name: Type = data[start..end]` or `data[index]`
+
+The macro injects account-count bounds checking and per-account constraint validation directly into your function body — **at compile time**, with zero overhead at runtime beyond the checks themselves.
+
+---
+
+### 3. Generate the IDL
+
+From inside your Pinocchio program directory (where your `Cargo.toml` lives):
+
+```bash
+pinocchio-idl build
+```
+
+This produces `idl.json` in the current directory. Options:
+
+```bash
+pinocchio-idl build \
+  --manifest-path path/to/Cargo.toml \   # default: ./Cargo.toml
+  --out target/idl/my_program.idl.json   # default: ./idl.json
+```
+
+The generated file is a valid Anchor-compatible IDL, usable with any Anchor TypeScript client or IDL viewer.
+
+---
+
+## Example: Escrow Program
+
+A complete working example lives in [`crates/fixtures/escrow-fixture/src/lib.rs`](crates/fixtures/escrow-fixture/src/lib.rs):
+
+```rust
+use pinocchio::{AccountView, ProgramResult, error::ProgramError};
+use pinocchio::pubkey::Pubkey;
+use pinocchio_pubkey::declare_id;
+use pinocchio_idl_macros::{p_instruction, p_state};
+
+declare_id!("11111111111111111111111111111111111111111");
+
+#[p_state]
+pub struct Escrow {
+    pub seed:    u64,
+    pub maker:   Pubkey,
+    pub mint_a:  Pubkey,
+    pub mint_b:  Pubkey,
+    pub receive: u64,
+    pub bump:    u8,
+}
+
+#[p_instruction(
+    id = 0,
+    accounts = [
+        maker(signer, mut),
+        escrow(mut, pda = ["escrow", maker, seed], state = Escrow),
+        vault(mut, relations = [escrow, mint_a]),
+        token_program(address = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
+    ],
+    data = [
+        seed:    u64 = data[0..8],
+        receive: u64 = data[8..16],
+        bump:    u8  = data[16]
+    ]
+)]
+pub fn process_make_instruction(accounts: &[AccountView], data: &[u8]) -> ProgramResult {
+    let [maker, mint_a, mint_b, escrow, vault, token_program] = accounts else {
+        return Err(ProgramError::NotEnoughAccountKeys)
+    };
+    Ok(())
+}
+```
+
+---
+
+## How it Works
+
+```
+Your Pinocchio source (.rs files)
+        │
+        ▼
+  pinocchio-idl build
+        │
+        ├─ Walks all .rs files in src/
+        ├─ Parses each file with `syn`
+        ├─ Discovers #[p_instruction] and #[p_state] items
+        ├─ Reads program name/version from Cargo.toml
+        └─ Serializes to Anchor-compatible idl.json
+```
+
+The `#[p_instruction]` and `#[p_state]` macros work **independently** of the CLI — they expand at Rust compile time, injecting validation code into your handlers. The CLI is a pure static analysis tool that re-parses your source without invoking the Rust compiler.
+
+---
+
+## IDL Output Format
+
+The generated `idl.json` follows the Anchor IDL spec:
+
+```json
+{
+  "address": "<your program id>",
+  "metadata": {
+    "name": "your-program",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "..."
+  },
+  "instructions": [
+    {
+      "name": "process_make_instruction",
+      "discriminator": [0],
+      "accounts": [
+        { "name": "maker", "writable": true, "signer": true },
+        { "name": "escrow", "writable": true, "pda": { "seeds": [...] } },
+        ...
+      ],
+      "args": [
+        { "name": "seed",    "type": "u64" },
+        { "name": "receive", "type": "u64" },
+        { "name": "bump",    "type": "u8"  }
+      ]
+    }
+  ],
+  "accounts": [...],
+  "types": [...],
+  "errors": [],
+  "constants": []
+}
+```
+
+---
+
+## Building from Source
+
+```bash
+git clone https://github.com/DivineUX23/pinocchio-idl.git
+cd pinocchio-idl
+cargo build --workspace
+```
+
+Run the tests:
+
+```bash
+cargo test --workspace
+>>>>>>> 431b462 (readme updated)
 ```
 
 ---
 
 ## Contributing
 
+<<<<<<< HEAD
 ```
 crates/
 ├── pinocchio-idl-core/     # Shared parsing types, Idl* structs, helper functions
@@ -368,3 +659,12 @@ cd pinocchio-idl
 cargo test --workspace
 cargo clippy --workspace --all-targets
 ```
+=======
+Issues and PRs are welcome. This project is in active development as part of the Turbine Solana accelerator program.
+
+---
+
+## License
+
+Licensed under the MIT License. See [LICENSE](LICENSE) for details.
+>>>>>>> 431b462 (readme updated)
