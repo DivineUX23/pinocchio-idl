@@ -348,14 +348,3 @@ This is a beta / capstone-phase project. The following known gaps exist:
 - [ ] Publish to crates.io
 - [ ] `cargo pinocchio-idl` plugin
 
----
-
-## Contributing
-
-Issues and PRs are welcome. This project is in active development as part of the Turbine Solana accelerator program.
-
----
-
-## License
-
-Licensed under the MIT License. See [LICENSE](LICENSE) for details.
