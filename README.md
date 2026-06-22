@@ -6,7 +6,6 @@
 
 The macros do double duty: they **generate IDL metadata** _and_ **auto-inject security validation** (account-count bounds checks, signer/writable guards) directly into your instruction handlers **at compile time** — so you get correctness enforcement with no runtime cost and no framework in your dependency tree.
 
-> **Status:** Beta / Capstone project. Not yet published to crates.io — install directly from GitHub (see below).
 
 ---
 
