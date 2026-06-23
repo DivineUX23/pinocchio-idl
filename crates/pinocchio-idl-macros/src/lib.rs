@@ -91,7 +91,7 @@ pub fn p_instruction(attr: TokenStream, item: TokenStream) -> TokenStream {
         }
 
 
-        /* Disabled for now*/
+        /* Disabled for now
         if let Some(pda_seeds) = &account.pda_seeds {
             let seed_classes: Vec<_> = match pda_seeds.0.iter()
                 .map(|expr| classify_seed(expr, &account_names, &arg_names))
@@ -120,7 +120,7 @@ pub fn p_instruction(attr: TokenStream, item: TokenStream) -> TokenStream {
             };
 
             injected_statement.push(quote! {
-                let expected_pda = pinocchio::pubkey::Pubkey::create_program_address(
+                let expected_pda = pubkey::Pubkey::create_program_address(
                     &[#(#seed_tokens),*, &[#bump_ident]],
                     program_id,
                 ).map_err(|_| ProgramError::InvalidArgument)?;
@@ -130,7 +130,7 @@ pub fn p_instruction(attr: TokenStream, item: TokenStream) -> TokenStream {
                 }
             });
         }
-        
+        */
     }
 
     let all_injections = quote! {
