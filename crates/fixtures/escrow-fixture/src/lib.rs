@@ -1,9 +1,9 @@
 use pinocchio::{AccountView, ProgramResult, error::ProgramError};
 use pinocchio::pubkey::Pubkey;
-//use pinocchio_pubkey::declare_id;
+use pinocchio_pubkey::declare_id;
 use pinocchio_idl_macros::{p_instruction, p_state};
 
-pinocchio_pubkey::declare_id!("11111111111111111111111111111111111111111");
+declare_id!("11111111111111111111111111111111111111111");
 
 #[p_state]
 pub struct Escrow {
