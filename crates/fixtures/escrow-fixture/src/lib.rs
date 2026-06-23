@@ -1,9 +1,9 @@
 use pinocchio::{AccountView, ProgramResult, error::ProgramError};
 use pinocchio::pubkey::Pubkey;
-use pinocchio_pubkey::declare_id;
+//use pinocchio_pubkey::declare_id;
 use pinocchio_idl_macros::{p_instruction, p_state};
 
-declare_id!("11111111111111111111111111111111111111111");
+pinocchio_pubkey::declare_id!("11111111111111111111111111111111111111111");
 
 #[p_state]
 pub struct Escrow {
@@ -15,11 +15,15 @@ pub struct Escrow {
     pub bump: u8,
 }
 
+
 #[p_instruction(
     id = 0,
     accounts = [
         maker(signer, mut),
         escrow(mut, pda=["escrow", maker, seed], state=Escrow),
+        vault(mut, pda=["vault", maker, seed]),
+        escrow_vault(mut, pda=[escrow, maker, seed]),
+
         vault(mut, relations=[escrow, mint_a]),
         token_program(address = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
     ],
@@ -33,5 +37,10 @@ pub fn process_make_instruction(accounts: &[AccountView], data: &[u8]) -> Progra
     let [maker, mint_a, mint_b, escrow, vault, token_program] = accounts else {
         return Err(ProgramError::NotEnoughAccountKeys)
     };
+
+    let space = Escrow::DISCRIMINATOR;
+    let space = Escrow::SPACE;
+
+
     Ok(())
 }

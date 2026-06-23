@@ -378,7 +378,6 @@ impl Parse for Data {
                     DataSlice::Index(content.parse::<syn::Expr>()?)
 
                 });
-
                 //slice_start = Some(content.parse());
                 //content.parse::<Token![..]>()?;
                 //slice_end = Some(content.parse());

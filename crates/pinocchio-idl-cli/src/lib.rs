@@ -44,7 +44,19 @@ pub(crate) fn visit_items(items: &[Item], discovery: &mut Discovery) {
             }
             Item::Macro(mac) => {
 
+                /*
                 if mac.mac.path.is_ident("declare_id") {
+                    if let Ok(lit) = mac.mac.parse_body::<syn::LitStr>() {
+                        discovery.program_id = Some(lit.value());
+                    }
+                }
+                */
+
+                let is_declare_id = mac.mac.path.segments.last()
+                    .map(|seg| seg.ident == "declare_id")
+                    .unwrap_or(false);
+
+                if is_declare_id {
                     if let Ok(lit) = mac.mac.parse_body::<syn::LitStr>() {
                         discovery.program_id = Some(lit.value());
                     }
