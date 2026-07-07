@@ -49,52 +49,6 @@
         {
           "name": "vault",
           "writable": true,
-          "pdaSeeds": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  118,
-                  97,
-                  117,
-                  108,
-                  116
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "maker"
-              },
-              {
-                "kind": "arg",
-                "path": "seed"
-              }
-            ]
-          }
-        },
-        {
-          "name": "escrow_vault",
-          "writable": true,
-          "pdaSeeds": {
-            "seeds": [
-              {
-                "kind": "account",
-                "path": "escrow"
-              },
-              {
-                "kind": "account",
-                "path": "maker"
-              },
-              {
-                "kind": "arg",
-                "path": "seed"
-              }
-            ]
-          }
-        },
-        {
-          "name": "vault",
-          "writable": true,
           "relations": [
             "escrow",
             "mint_a"

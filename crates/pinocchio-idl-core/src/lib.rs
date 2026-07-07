@@ -484,7 +484,7 @@ pub fn rust_type_to_idl_type(ty: &Type) -> syn::Result<String> {
 
         other => Err(syn::Error::new_spanned(
             other,
-            "unsupported data type in #[p_instruction(...)] or #[p_state] — use a primitive or `Pubkey`",
+            "unsupported data type in #[p_instruction(...)] or #[p_state] — use a primitive, `Pubkey`, or `Address`",
         ))
     }
 }
@@ -551,7 +551,7 @@ fn seed_expr_to_idl(
 
 
 fn is_pubkey_type(ty: &Type) -> bool {
-    matches!(ty, Type::Path(p) if p.path.is_ident("Pubkey"))
+    matches!(ty, Type::Path(p) if p.path.is_ident("Pubkey") || p.path.is_ident("Address"))
 }
 
 pub fn seed_class_to_tokens(class: &SeedClass, data_fields: &[Data]) -> syn::Result<TokenStream2> {
@@ -562,7 +562,7 @@ pub fn seed_class_to_tokens(class: &SeedClass, data_fields: &[Data]) -> syn::Res
 
             quote! { #lit }
         }
-        SeedClass::Account(ident) => quote! { #ident.key().as_ref() },
+        SeedClass::Account(ident) => quote! { #ident.address().as_ref() }, // #ident.key()
 
         SeedClass::Arg(ident) => {
             let field = data_fields.iter()
