@@ -11,9 +11,11 @@ The macros do double duty: they **generate IDL metadata** _and_ **auto-inject se
 
 ## Features
 
-- **Compile-time security injection** — `#[p_instruction]` rewrites your handler at compile time to inject account-count bounds checking and per-account `signer` / `writable` guards. No runtime framework, no trait vtables, just the checks you declared.
+- **Compile-time security injection** — `#[p_instruction]` rewrites your handler at compile time to inject account-count bounds checking, per-account `signer`/`writable` guards, and **PDA on-chain verification** via `pinocchio_pubkey::derive_address`. No runtime framework, no trait vtables, just the checks you declared.
 - **`#[p_instruction(...)]`** — Declare accounts (writable, signer, PDA seeds, relations, fixed addresses) and instruction data (byte-slice extraction) in a concise attribute DSL.
-- **`#[p_state]`** — Derive a compile-time `SPACE` constant and an Anchor-compatible 8-byte `DISCRIMINATOR` (SHA-256 of `"account:<StructName>"`) for any account state struct.
+- **`#[p_state]`** — Derive a compile-time `SPACE` constant and an Anchor-compatible 8-byte `DISCRIMINATOR` (SHA-256 of `"account:<StructName>"`) for any account state struct. Supported field types include primitives, `Pubkey`, fixed-size arrays, `Vec<T>`, and `Option<T>`.
+- **`#[p_error]`** — Annotate an error enum to have all its variants automatically emitted into the `errors` section of the IDL, with human-readable messages taken from doc comments and optional `#[p_code = N]` overrides.
+- **`#[p_constant]`** — Annotate any `const` item to have its name, type, and value emitted into the `constants` section of the IDL.
 - **Anchor + Codama compatible IDL** — The generated `idl.json` satisfies the Anchor IDL spec and is directly consumable by [Codama](https://github.com/codama-idl/codama) for client generation.
 - **Zero runtime overhead** — All macro expansion happens at Rust compile time. The CLI is a pure static-analysis tool that never invokes the compiler.
 - **Zero framework wrappers** — No Anchor, no additional runtime traits or abstractions. Your Pinocchio program stays exactly as lean as you wrote it.
@@ -109,12 +111,26 @@ This expands to:
 
 ```rust
 impl Escrow {
-    pub const SPACE: usize = 8 + 8 + 32 + 32 + 32 + 8 + 1; // 8-byte discriminator + fields
+    pub const SPACE: usize = 8 + 32 + 32 + 32 + 8 + 1; // raw field bytes
     pub const DISCRIMINATOR: [u8; 8] = [/* sha256("account:Escrow")[..8] */];
 }
 ```
 
-Supported field types: `u8`, `i8`, `bool`, `u16`, `i16`, `u32`, `i32`, `u64`, `i64`, `u128`, `i128`, `Pubkey`, and fixed-size arrays thereof.
+Supported field types:
+
+| Type | IDL type | `SPACE` bytes |
+|---|---|---|
+| `u8`, `i8`, `bool` | `u8` / `i8` / `bool` | 1 |
+| `u16`, `i16` | `u16` / `i16` | 2 |
+| `u32`, `i32` | `u32` / `i32` | 4 |
+| `u64`, `i64` | `u64` / `i64` | 8 |
+| `u128`, `i128` | `u128` / `i128` | 16 |
+| `Pubkey` / `Address` | `pubkey` | 32 |
+| `[u8; 32]` | `pubkey` | 32 |
+| `[T; N]` | `[T; N]` | elem × N |
+| `Vec<T>` | `vec<T>` | 4 (length prefix only) |
+| `Option<T>` | `option<T>` | 1 + size(T) |
+| Custom enum / struct | name as-is | error — use a primitive wrapper |
 
 ---
 
@@ -154,7 +170,7 @@ pub fn process_make_instruction(accounts: &[AccountView], data: &[u8]) -> Progra
 |---|---|---|
 | Writable | `mut` | Validates `account.is_writable()` at runtime |
 | Signer | `signer` | Validates `account.is_signer()` at runtime |
-| PDA seeds | `pda = ["literal", account_name, arg_name]` | Recorded in IDL for client-side PDA derivation |
+| PDA seeds | `pda = ["literal", account_name, arg_name]` | Recorded in IDL **and** verified on-chain via `pinocchio_pubkey::derive_address` |
 | Linked state | `state = StructName` | Associates an account with its `#[p_state]` type |
 | Fixed address | `address = "Base58..."` | Records a known program/sysvar address in the IDL |
 | Relations | `relations = [other, another]` | Records account relationships in the IDL |
@@ -185,6 +201,51 @@ All of this happens at **compile time** with zero runtime overhead and without a
 
 ---
 
+#### `#[p_error]` — Program error enum
+
+Annotate an error enum so all its variants are emitted into the `errors` section of the IDL. Use standard Rust doc comments (`///`) as the human-readable message, and the optional `#[p_code = N]` attribute to override the default 0-based error code:
+
+```rust
+use pinocchio_idl_macros::p_error;
+
+#[p_error]
+pub enum EscrowError {
+    /// The escrow has already been taken
+    AlreadyTaken,          // code 0
+    /// The offer amount is zero
+    ZeroAmount,            // code 1
+    #[p_code = 100]
+    /// Invalid mint provided
+    InvalidMint,           // code 100
+    /// The escrow has expired
+    Expired,               // code 3
+}
+```
+
+- `#[p_code = N]` overrides the sequential index for a single variant; other variants continue from their position index.
+- `#[p_code]` is stripped at compile time by the macro, so rustc never sees an unknown attribute.
+- Doc comments become the `msg` field in the IDL; the variant name is used as a fallback if no doc comment is present.
+
+---
+
+#### `#[p_constant]` — On-chain constant
+
+Annotate any `const` item to have it appear in the `constants` section of the IDL:
+
+```rust
+use pinocchio_idl_macros::p_constant;
+
+#[p_constant]
+pub const MAX_ESCROW_DURATION: u64 = 60 * 60 * 24 * 30;  // 30 days in seconds
+
+#[p_constant]
+pub const ESCROW_VERSION: u8 = 1;
+```
+
+The CLI reads the constant's name, type, and value expression from the source AST and serialises them directly into the IDL.
+
+---
+
 ### 3. Generate the IDL
 
 From inside your Pinocchio program directory (where your `Cargo.toml` lives):
@@ -210,21 +271,37 @@ The generated file is a valid **Anchor-compatible IDL** and is also directly con
 A complete working example lives in [`crates/fixtures/escrow-fixture/src/lib.rs`](crates/fixtures/escrow-fixture/src/lib.rs):
 
 ```rust
-use pinocchio::{AccountView, ProgramResult, error::ProgramError};
-use pinocchio::pubkey::Pubkey;
-use pinocchio_pubkey::declare_id;
-use pinocchio_idl_macros::{p_instruction, p_state};
+use pinocchio::{
+    AccountView, ProgramResult,
+    error::ProgramError,
+};
+use pinocchio_idl_macros::{p_constant, p_error, p_instruction, p_state};
 
-declare_id!("11111111111111111111111111111111111111111");
+pinocchio::address::declare_id!("11111111111111111111111111111111111111111");
+
+#[p_constant]
+pub const ESCROW_VERSION: u8 = 1;
+
+#[p_error]
+pub enum EscrowError {
+    /// The escrow has already been taken
+    AlreadyTaken,
+    /// The offer amount is zero
+    ZeroAmount,
+    #[p_code = 100]
+    /// Invalid mint provided
+    InvalidMint,
+}
 
 #[p_state]
 pub struct Escrow {
-    pub seed:    u64,
-    pub maker:   Pubkey,
-    pub mint_a:  Pubkey,
-    pub mint_b:  Pubkey,
-    pub receive: u64,
-    pub bump:    u8,
+    pub seed:      u64,
+    pub maker:     [u8; 32],
+    pub mint_a:    [u8; 32],
+    pub mint_b:    [u8; 32],
+    pub receive:   u64,
+    pub bump:      u8,
+    pub authority: Option<[u8; 32]>,  // Option<T> is now supported
 }
 
 #[p_instruction(
@@ -261,7 +338,7 @@ Your Pinocchio source (.rs files)
         │
         ├─ Walks all .rs files in src/
         ├─ Parses each file with `syn`
-        ├─ Discovers #[p_instruction] and #[p_state] items
+        ├─ Discovers #[p_instruction], #[p_state], #[p_error], #[p_constant] items
         ├─ Reads program name/version from Cargo.toml
         └─ Serializes to Anchor-compatible idl.json
 ```
@@ -289,7 +366,7 @@ The generated `idl.json` follows the Anchor IDL spec and is also **Codama compat
       "discriminator": [0],
       "accounts": [
         { "name": "maker", "writable": true, "signer": true },
-        { "name": "escrow", "writable": true, "pda": { "seeds": [...] } },
+        { "name": "escrow", "writable": true, "pdaSeeds": { "seeds": [...] } },
         ...
       ],
       "args": [
@@ -299,10 +376,29 @@ The generated `idl.json` follows the Anchor IDL spec and is also **Codama compat
       ]
     }
   ],
-  "accounts": [...],
-  "types": [...],
-  "errors": [],
-  "constants": []
+  "accounts": [ { "name": "Escrow", "discriminator": [...] } ],
+  "types": [
+    {
+      "name": "Escrow",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          { "name": "seed",      "type": "u64" },
+          { "name": "maker",     "type": "pubkey" },
+          { "name": "authority", "type": "option<pubkey>" }
+        ]
+      }
+    }
+  ],
+  "errors": [
+    { "code": 0,   "name": "AlreadyTaken", "msg": "The escrow has already been taken" },
+    { "code": 1,   "name": "ZeroAmount",   "msg": "The offer amount is zero" },
+    { "code": 100, "name": "InvalidMint",  "msg": "Invalid mint provided" }
+  ],
+  "constants": [
+    { "name": "ESCROW_VERSION",     "type": "u8",  "value": "1" },
+    { "name": "MAX_ESCROW_DURATION","type": "u64", "value": "60 * 60 * 24 * 30" }
+  ]
 }
 ```
 
@@ -332,49 +428,14 @@ This is a beta / capstone-phase project. The following known gaps exist:
 
 | Area | Status |
 |---|---|
-| Support Pinocchio version > 0.10.0 | Pinocchio v0.10.0 introduced new account type `AccountView` and changed how PDA seeds are declared, breaking backwards compatibility. This IDL generator only supports versions up to 0.10.0. |
-| PDA on-chain verification | The `pda = [...]` constraint is **recorded in the IDL** for client-side derivation but the corresponding on-chain `create_program_address` check only wokrs for AccountView` and not for the new types like Accounts in Pinocchio version later than 0.10.0 |
-| Multi-file module re-exports | The CLI walks `src/` recursively but only discovers items declared directly with `#[p_instruction]` / `#[p_state]` — items re-exported via `pub use` from external crates are not picked up |
-| No `cargo-pinocchio-idl` integration | Must be invoked as a standalone binary; no `cargo` subcommand plugin yet |
+| Pinocchio version > 0.10.0 | `AccountView` and updated PDA APIs from Pinocchio ≥ 0.11 are fully supported. Older pre-0.10 account types are not. |
+| Multi-file module re-exports | The CLI walks `src/` recursively but only discovers items annotated directly with `#[p_instruction]` / `#[p_state]` / `#[p_error]` / `#[p_constant]` — items re-exported via `pub use` from external crates are not picked up. |
+| No `cargo-pinocchio-idl` integration | Must be invoked as a standalone binary; no `cargo` subcommand plugin yet. |
+| Enum / struct field types in `#[p_state]` | Custom enum or nested struct fields are not sized automatically. Use a primitive or `[u8; N]` wrapper, or size the account manually. |
 
-### Roadmap Ideas
+### Roadmap
 
 - [ ] Publish to crates.io
 - [ ] `cargo pinocchio-idl` plugin
-
-
-### potential next step:
-
-pub fn process_make(accounts: &[AccountView], data: &[u8]) -> ProgramResult {
-    // 1. One macro call handles unpacking, data parsing, and security guards.
-    p_parse!(
-        accounts = [
-            maker(signer, mut),
-            escrow(mut, pda = ["escrow", maker, seed]),
-        ],
-        args = [
-            seed: u64,
-            receive: u64,
-            bump: u8
-        ]
-    );
-
-    // 2. You just write your business logic! 
-    // `maker`, `escrow`, `seed`, `receive`, and `bump` are now fully typed, 
-    // securely validated variables ready to use.
-    
-    msg!("Maker is: {:?}", maker.key());
-    msg!("Seed is: {}", seed);
-
-    Ok(())
-}
-
-
-
-If the AST sees TokenProgram, output "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" into the IDL.
-If it sees SystemProgram, output "11111111111111111111111111111111".
-If it sees AssociatedTokenProgram, output "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL".
-
-
-
-cargo run -- build   --manifest-path /home/divine/turbine/acc-turbine/pinocchio-idl/crates/fixtures/escrow-fixture/Cargo.toml   --out /home/divine/turbine/acc-turbine/pinocchio-idl/crates/fixtures/escrow-fixture/idl.json
+- [ ] Well-known program address auto-resolution (e.g. `TokenProgram` → `TokenkegQ...`, `SystemProgram` → `111...`, `AssociatedTokenProgram` → `ATokenGP...`)
+- [ ] `p_parse!` declarative macro for inline account unpacking + data parsing + security guards in a single call-site macro
