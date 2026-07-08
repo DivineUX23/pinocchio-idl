@@ -4,10 +4,29 @@ use pinocchio::{
     sysvars::{rent::Rent, Sysvar},
     AccountView, ProgramResult,
 };
-use pinocchio_idl_macros::{p_instruction, p_state};
+use pinocchio_idl_macros::{p_constant, p_error, p_instruction, p_state};
 use pinocchio_system::instructions::CreateAccount;
 
 pinocchio::address::declare_id!("11111111111111111111111111111111111111111");
+
+#[p_constant]
+pub const MAX_ESCROW_DURATION: u64 = 60 * 60 * 24 * 30;
+
+#[p_constant]
+pub const ESCROW_VERSION: u8 = 1;
+
+#[p_error]
+pub enum EscrowError {
+    /// item already taken
+    AlreadyTaken,
+    /// item is zero
+    ZeroAmount,
+    /// item is invalid
+    #[p_code = 100]
+    InvalidMint,
+    /// item has expired
+    Expired,
+}
 
 #[p_state]
 pub struct Escrow {
@@ -17,6 +36,7 @@ pub struct Escrow {
     pub mint_b: [u8; 32],
     pub receive: u64,
     pub bump: u8,
+    pub authority: Option<[u8; 32]>,
 }
 
 #[p_instruction(

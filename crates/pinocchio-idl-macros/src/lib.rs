@@ -285,16 +285,48 @@ pub fn p_state(_attr: TokenStream, item: TokenStream) -> TokenStream {
     })
 }
 
+#[proc_macro_attribute]
+pub fn p_error(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    use syn::ItemEnum;
+    let mut item_enum = parse_macro_input!(item as ItemEnum);
+
+    for variant in &mut item_enum.variants {
+        variant.attrs.retain(|attr| !attr.path().is_ident("p_code"));
+    }
+
+    TokenStream::from(quote! { #item_enum })
+}
+
+#[proc_macro_attribute]
+pub fn p_constant(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    item
+}
+
 fn field_byte_size(ty: &Type) -> syn::Result<usize> {
     match ty {
         Type::Path(p) => {
-            let ident = p
+            let last_seg = p
                 .path
                 .segments
                 .last()
-                .ok_or_else(|| syn::Error::new_spanned(p, "empty type path"))?
-                .ident
-                .to_string();
+                .ok_or_else(|| syn::Error::new_spanned(p, "empty type path"))?;
+            let ident = last_seg.ident.to_string();
+
+            match ident.as_str() {
+                "Vec" => {
+                    // 4-byte length prefix + heap data
+                    return Ok(4);
+                }
+                "Option" => {
+                    // 1-byte discriminant + inner type size
+                    let inner = extract_single_type_arg(p).ok_or_else(|| {
+                        syn::Error::new_spanned(p, "`Option` requires one type argument")
+                    })?;
+                    return Ok(1 + field_byte_size(inner)?);
+                }
+                _ => {}
+            }
+
             match ident.as_str() {
                 "u8" | "i8" | "bool" => Ok(1),
                 "u16" | "i16" => Ok(2),
@@ -305,8 +337,9 @@ fn field_byte_size(ty: &Type) -> syn::Result<usize> {
                 other => Err(syn::Error::new_spanned(
                     p,
                     format!(
-                        "#[p_state] doesn't know the size of `{other}` — \
-                                use an integer, bool, Pubkey, Address, or fixed-size array"
+                        "#[p_state] doesn't know the size of `{other}`, \
+                                use an integer, bool, Pubkey, Address, Vec<T>, Option<T>, or a fixed-size array. \
+                                For enum/struct types, annotate with an explicit byte size or use a primitive."
                     ),
                 )),
             }
@@ -331,4 +364,16 @@ fn field_byte_size(ty: &Type) -> syn::Result<usize> {
             "unsupported field type for #[p_state]",
         )),
     }
+}
+
+fn extract_single_type_arg(p: &syn::TypePath) -> Option<&Type> {
+    let last = p.path.segments.last()?;
+    if let syn::PathArguments::AngleBracketed(ref args) = last.arguments {
+        for arg in &args.args {
+            if let syn::GenericArgument::Type(t) = arg {
+                return Some(t);
+            }
+        }
+    }
+    None
 }

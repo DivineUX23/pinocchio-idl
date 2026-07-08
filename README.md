@@ -343,8 +343,44 @@ This is a beta / capstone-phase project. The following known gaps exist:
 
 - [ ] `#[p_error]` attribute to populate the `errors` IDL section
 - [ ] `#[p_constant]` attribute for on-chain constants
-- [ ] Re-enable and stabilize PDA on-chain verification in the macro
+- [ DONE ] Re-enable and stabilize PDA on-chain verification in the macro
 - [ ] Support `Vec<T>`, `Option<T>`, and enum field types in `#[p_state]`
 - [ ] Publish to crates.io
 - [ ] `cargo pinocchio-idl` plugin
 
+
+### potential next step:
+
+pub fn process_make(accounts: &[AccountView], data: &[u8]) -> ProgramResult {
+    // 1. One macro call handles unpacking, data parsing, and security guards.
+    p_parse!(
+        accounts = [
+            maker(signer, mut),
+            escrow(mut, pda = ["escrow", maker, seed]),
+        ],
+        args = [
+            seed: u64,
+            receive: u64,
+            bump: u8
+        ]
+    );
+
+    // 2. You just write your business logic! 
+    // `maker`, `escrow`, `seed`, `receive`, and `bump` are now fully typed, 
+    // securely validated variables ready to use.
+    
+    msg!("Maker is: {:?}", maker.key());
+    msg!("Seed is: {}", seed);
+
+    Ok(())
+}
+
+
+
+If the AST sees TokenProgram, output "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" into the IDL.
+If it sees SystemProgram, output "11111111111111111111111111111111".
+If it sees AssociatedTokenProgram, output "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL".
+
+
+
+cargo run -- build   --manifest-path /home/divine/turbine/acc-turbine/pinocchio-idl/crates/fixtures/escrow-fixture/Cargo.toml   --out /home/divine/turbine/acc-turbine/pinocchio-idl/crates/fixtures/escrow-fixture/idl.json

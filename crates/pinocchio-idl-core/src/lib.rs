@@ -1,7 +1,10 @@
-use proc_macro2::{TokenStream as TokenStream2};
+use proc_macro2::TokenStream as TokenStream2;
 use quote::ToTokens;
-use syn::{Expr, FnArg, Ident, Lit, Pat, Stmt, Signature, LitInt, Token, bracketed, parse::{Parse, ParseStream}, Type};
 use quote::quote;
+use syn::{
+    Expr, FnArg, Ident, Lit, LitInt, Pat, Signature, Stmt, Token, Type, bracketed,
+    parse::{Parse, ParseStream},
+};
 
 pub mod cli_struct;
 pub use cli_struct::*;
@@ -10,7 +13,7 @@ pub use cli_struct::*;
 pub struct Instruction {
     pub id: Option<u8>,
     pub accounts: Vec<Account>,
-    pub data: Option<Vec<Data>>
+    pub data: Option<Vec<Data>>,
 }
 
 impl Parse for Instruction {
@@ -19,9 +22,7 @@ impl Parse for Instruction {
         let mut accounts = Vec::new();
         let mut data = None;
 
-
         while !input.is_empty() {
-
             let ident: Ident = input.parse()?;
 
             match ident.to_string().as_str() {
@@ -39,7 +40,6 @@ impl Parse for Instruction {
                     let parsed = content.parse_terminated(Account::parse, Token![,])?;
 
                     accounts = parsed.into_iter().collect();
-
                 }
 
                 "data" => {
@@ -54,28 +54,24 @@ impl Parse for Instruction {
                 }
 
                 other => {
-                    return Err(syn::Error::new (
+                    return Err(syn::Error::new(
                         ident.span(),
-                        format!("unknown key `{other}` in #[p_instruction(...)]")
+                        format!("unknown key `{other}` in #[p_instruction(...)]"),
                     ));
                 }
-
             }
 
             if input.peek(Token![,]) {
                 input.parse::<Token![,]>()?;
             }
-
         }
 
         Ok(Instruction { id, accounts, data })
-
     }
 }
 
 impl Instruction {
     pub fn add_accounts(&mut self, stmts: &[Stmt], accounts_param: &str) {
-
         let binded_accounts = count_account_binding(stmts, accounts_param);
 
         let new_binds: Vec<Ident> = binded_accounts
@@ -83,39 +79,48 @@ impl Instruction {
             .filter(|bind| !self.accounts.iter().any(|acc| acc.name == *bind))
             .collect();
 
-        let other_accounts: Vec<Account> = new_binds
-            .into_iter()
-            .map(Account::new_from_ident).collect();
+        let other_accounts: Vec<Account> =
+            new_binds.into_iter().map(Account::new_from_ident).collect();
 
         self.accounts.extend(other_accounts);
 
         //Instruction
-
     }
 
     pub fn into_idl(&self, name: String, index: u8) -> syn::Result<IdlInstruction> {
         let account_names: Vec<String> = self.accounts.iter().map(|a| a.name.to_string()).collect();
 
-        let arg_names: Vec<String> = self.data.as_ref().map(|fields| fields.iter().map(|f| f.name.to_string()).collect())
+        let arg_names: Vec<String> = self
+            .data
+            .as_ref()
+            .map(|fields| fields.iter().map(|f| f.name.to_string()).collect())
             .unwrap_or_default();
 
-        let accounts = self.accounts.iter().map(|acc| acc.into_idl(&account_names, &arg_names))
+        let accounts = self
+            .accounts
+            .iter()
+            .map(|acc| acc.into_idl(&account_names, &arg_names))
             .collect::<syn::Result<Vec<_>>>()?;
 
-        let args = self.data.as_ref().map(|fields| fields.iter().map(Data::into_idl_arg).collect::<syn::Result<Vec<_>>>())
+        let args = self
+            .data
+            .as_ref()
+            .map(|fields| {
+                fields
+                    .iter()
+                    .map(Data::into_idl_arg)
+                    .collect::<syn::Result<Vec<_>>>()
+            })
             .transpose()?;
 
         Ok(IdlInstruction {
             name,
             discriminator: vec![self.id.unwrap_or(index)],
             accounts,
-            args
+            args,
         })
     }
-
-
 }
-
 
 #[derive(Debug)]
 pub struct Account {
@@ -140,12 +145,10 @@ impl Parse for Account {
         let mut relations = Vec::new();
 
         if input.peek(syn::token::Paren) {
-
             let content;
             syn::parenthesized!(content in input);
 
             while !content.is_empty() {
-
                 if content.peek(Token![mut]) {
                     content.parse::<Token![mut]>()?;
                     is_mut = true;
@@ -181,24 +184,28 @@ impl Parse for Account {
                     }
 
                     other => {
-                        return Err(syn::Error::new (
+                        return Err(syn::Error::new(
                             ident.span(),
-                            format!("unknown account constraint `{other}`")
-                        ))
+                            format!("unknown account constraint `{other}`"),
+                        ));
                     }
                 }
 
                 if content.peek(Token![,]) {
                     content.parse::<Token![,]>()?;
                 }
-
             }
-
-
         }
 
-        Ok(Account { name, is_signer, is_mut, pda_seeds, struct_state, address, relations })
-
+        Ok(Account {
+            name,
+            is_signer,
+            is_mut,
+            pda_seeds,
+            struct_state,
+            address,
+            relations,
+        })
     }
 }
 
@@ -215,9 +222,14 @@ impl Account {
         }
     }
 
-
-    pub fn into_idl(&self, account_names: &[String], arg_names: &[String]) -> syn::Result<IdlAccount> {
-        let pda_seeds = self.pda_seeds.as_ref()
+    pub fn into_idl(
+        &self,
+        account_names: &[String],
+        arg_names: &[String],
+    ) -> syn::Result<IdlAccount> {
+        let pda_seeds = self
+            .pda_seeds
+            .as_ref()
             .map(|seed| seed.into_idl(account_names, arg_names))
             .transpose()?;
 
@@ -232,12 +244,7 @@ impl Account {
             state: self.struct_state.as_ref().map(|s| s.to_string()),
         })
     }
-
-
 }
-
-
-
 
 #[derive(Debug)]
 pub struct Seed(pub Vec<Expr>);
@@ -249,41 +256,41 @@ impl Parse for Seed {
         let content;
         syn::bracketed!(content in input);
         let exprs = content.parse_terminated(Expr::parse, Token![,])?;
-        Ok(
-            Seed(exprs.into_iter().collect())
-        )
+        Ok(Seed(exprs.into_iter().collect()))
     }
 }
 
 impl ToTokens for Seed {
     fn to_tokens(&self, tokens: &mut TokenStream2) {
-
         for (i, expr) in self.0.iter().enumerate() {
             if i > 0 {
                 Token![,](proc_macro2::Span::call_site()).to_tokens(tokens);
             }
             expr.to_tokens(tokens);
         }
-
     }
 }
 
 impl Seed {
     pub fn into_idl(&self, account_names: &[String], arg_names: &[String]) -> syn::Result<IdlPda> {
-        let seeds = self.0.iter().map(|expr| seed_expr_to_idl(expr, account_names, arg_names)).collect::<syn::Result<Vec<_>>>()?;
+        let seeds = self
+            .0
+            .iter()
+            .map(|expr| seed_expr_to_idl(expr, account_names, arg_names))
+            .collect::<syn::Result<Vec<_>>>()?;
 
-        Ok(IdlPda { seeds, program: None })
+        Ok(IdlPda {
+            seeds,
+            program: None,
+        })
     }
 }
-
-
-
 
 #[derive(Debug)]
 pub enum SeedClass {
     Bytes(Vec<u8>),
     Account(Ident),
-    Arg(Ident)
+    Arg(Ident),
 }
 
 pub fn classify_seed(
@@ -293,14 +300,14 @@ pub fn classify_seed(
 ) -> syn::Result<SeedClass> {
     match strip(expr) {
         Expr::Lit(lit) => match &lit.lit {
-
             Lit::Str(s) => Ok(SeedClass::Bytes(s.value().into_bytes())),
             Lit::ByteStr(b) => Ok(SeedClass::Bytes(b.value())),
 
             other => Err(syn::Error::new_spanned(
-                other, "pda seed literal must be a string or byte string",
+                other,
+                "pda seed literal must be a string or byte string",
             )),
-        }, 
+        },
 
         Expr::Path(p) => {
             let ident = p.path.get_ident().ok_or_else(|| {
@@ -311,33 +318,27 @@ pub fn classify_seed(
 
             if account_names.iter().any(|a| a == &name) {
                 Ok(SeedClass::Account(ident.clone()))
-
             } else if arg_names.iter().any(|a| a == &name) {
                 Ok(SeedClass::Arg(ident.clone()))
-
             } else {
                 Err(syn::Error::new_spanned(
-                    p, format!("seed `{name}` doesn't match any declared account or data field"),
+                    p,
+                    format!("seed `{name}` doesn't match any declared account or data field"),
                 ))
             }
         }
         other => Err(syn::Error::new_spanned(
-            other, "pda seed must be a string/byte-string literal or an identifier",
-        )),  
-
+            other,
+            "pda seed must be a string/byte-string literal or an identifier",
+        )),
     }
 }
-
-
-
-
 
 #[derive(Debug)]
 pub enum DataSlice {
     Range(syn::ExprRange),
-    Index(syn::Expr)
+    Index(syn::Expr),
 }
-
 
 #[derive(Debug)]
 pub struct Data {
@@ -345,10 +346,8 @@ pub struct Data {
     pub ty: Type,
     //pub slice_start: Option<usize>,
     //pub slice_end: Option<usize>
-
-    pub slice: Option<DataSlice>
+    pub slice: Option<DataSlice>,
 }
-
 
 impl Parse for Data {
     fn parse(input: ParseStream) -> syn::Result<Self> {
@@ -376,7 +375,6 @@ impl Parse for Data {
                     DataSlice::Range(content.parse()?)
                 } else {
                     DataSlice::Index(content.parse::<syn::Expr>()?)
-
                 });
                 //slice_start = Some(content.parse());
                 //content.parse::<Token![..]>()?;
@@ -384,40 +382,31 @@ impl Parse for Data {
             } else {
                 return Err(syn::Error::new(ident.span(), "expected `data`"));
             }
-
         }
 
         //Ok(Data { name, ty, slice_start, slice_end })
         Ok(Data { name, ty, slice })
-
     }
 }
-
 
 impl Data {
     pub fn into_idl_arg(&self) -> syn::Result<IdlArg> {
         Ok(IdlArg {
             name: self.name.to_string(),
-            r#type: rust_type_to_idl_type(&self.ty)?,
+            r#type: rust_to_idl(&self.ty)?,
         })
     }
 }
 
-
-
-
 pub struct State {
     pub name: Ident,
-    pub fields: Vec<Fields>
+    pub fields: Vec<Fields>,
 }
 
 pub struct Fields {
     pub name: Ident,
-    pub ty: Type
+    pub ty: Type,
 }
-
-
-
 
 ///Helper:
 
@@ -431,8 +420,8 @@ pub fn derive_instruction_name(ident: &Ident) -> String {
     ident.to_string()
 }
 
-/* 
-pub fn rust_type_to_idl_type(ty: &Type) -> syn::Result<String> {
+/*
+pub fn rust_to_idl(ty: &Type) -> syn::Result<String> {
     match ty {
         Type::Path(p) => {
             let ident = p.path.segments.last().ok_or_else(|| syn::Error::new_spanned(p, "empty type path"))?
@@ -445,31 +434,55 @@ pub fn rust_type_to_idl_type(ty: &Type) -> syn::Result<String> {
         }
         other => Err(syn::Error::new_spanned(
             other,
-            "unsupported data type in #[p_instruction(...)] — use a primitive or `Pubkey`",
+            "unsupported data type in #[p_instruction(...)], use a primitive or `Pubkey`",
         ))
     }
 }
 */
 
-pub fn rust_type_to_idl_type(ty: &Type) -> syn::Result<String> {
+pub fn rust_to_idl(ty: &Type) -> syn::Result<String> {
     match ty {
-
         Type::Path(p) => {
-            let ident = p.path.segments.last().ok_or_else(|| syn::Error::new_spanned(p, "empty type path"))?
-                .ident.to_string();
+            let last_seg = p
+                .path
+                .segments
+                .last()
+                .ok_or_else(|| syn::Error::new_spanned(p, "empty type path"))?;
+            let ident = last_seg.ident.to_string();
+
+            match ident.as_str() {
+                "Vec" => {
+                    let inner = extract_arg(p, "Vec")?;
+                    let inner_type = rust_to_idl(inner)?;
+                    return Ok(format!("vec<{inner_type}>"));
+                }
+                "Option" => {
+                    let inner = extract_arg(p, "Option")?;
+                    let inner_type = rust_to_idl(inner)?;
+                    return Ok(format!("option<{inner_type}>"));
+                }
+                _ => {}
+            }
 
             Ok(match ident.as_str() {
                 "Pubkey" | "Address" => "pubkey".to_string(),
                 other => other.to_string(),
             })
         }
-        
 
         Type::Array(arr) => {
-            let elem_type = rust_type_to_idl_type(&arr.elem)?;
+            let elem_type = rust_to_idl(&arr.elem)?;
             let len = match &arr.len {
-                syn::Expr::Lit(syn::ExprLit { lit: syn::Lit::Int(n), .. }) => n.base10_parse::<usize>()?,
-                _ => return Err(syn::Error::new_spanned(&arr.len, "array length must be a literal integer")),
+                syn::Expr::Lit(syn::ExprLit {
+                    lit: syn::Lit::Int(n),
+                    ..
+                }) => n.base10_parse::<usize>()?,
+                _ => {
+                    return Err(syn::Error::new_spanned(
+                        &arr.len,
+                        "array length must be a literal integer",
+                    ));
+                }
             };
 
             if elem_type == "u8" && len == 32 {
@@ -481,15 +494,34 @@ pub fn rust_type_to_idl_type(ty: &Type) -> syn::Result<String> {
             }
         }
 
-
         other => Err(syn::Error::new_spanned(
             other,
-            "unsupported data type in #[p_instruction(...)] or #[p_state] — use a primitive, `Pubkey`, or `Address`",
-        ))
+            "unsupported data type in #[p_instruction(...)] or #[p_state] use a primitive, `Pubkey`, `Address`, `Vec<T>`, or `Option<T>`",
+        )),
     }
 }
 
+fn extract_arg<'a>(typ: &'a syn::TypePath, wrapper: &str) -> syn::Result<&'a Type> {
+    let last = typ.path.segments.last().unwrap();
 
+    if let syn::PathArguments::AngleBracketed(ref args) = last.arguments {
+        let mut types = args.args.iter().filter_map(|a| {
+            if let syn::GenericArgument::Type(t) = a {
+                Some(t)
+            } else {
+                None
+            }
+        });
+
+        if let Some(inner) = types.next() {
+            return Ok(inner);
+        }
+    }
+    Err(syn::Error::new_spanned(
+        typ,
+        format!("`{wrapper}` requires exactly one type argument"),
+    ))
+}
 
 /*
 fn seed_expr_to_idl(
@@ -532,23 +564,22 @@ fn seed_expr_to_idl(
 }
 */
 
-
-
 fn seed_expr_to_idl(
     expr: &Expr,
     account_names: &[String],
-    arg_names: &[String]
+    arg_names: &[String],
 ) -> syn::Result<IdlPdaSeed> {
-
     Ok(match classify_seed(expr, account_names, arg_names)? {
         SeedClass::Bytes(value) => IdlPdaSeed::Const { value },
-        SeedClass::Account(ident) => IdlPdaSeed::Account { path: ident.to_string(), account: None },
-        SeedClass::Arg(ident) => IdlPdaSeed::Arg { path: ident.to_string() },
+        SeedClass::Account(ident) => IdlPdaSeed::Account {
+            path: ident.to_string(),
+            account: None,
+        },
+        SeedClass::Arg(ident) => IdlPdaSeed::Arg {
+            path: ident.to_string(),
+        },
     })
-
 }
-
-
 
 fn is_pubkey_type(ty: &Type) -> bool {
     matches!(ty, Type::Path(p) if p.path.is_ident("Pubkey") || p.path.is_ident("Address"))
@@ -557,7 +588,6 @@ fn is_pubkey_type(ty: &Type) -> bool {
 pub fn seed_class_to_tokens(class: &SeedClass, data_fields: &[Data]) -> syn::Result<TokenStream2> {
     Ok(match class {
         SeedClass::Bytes(bytes) => {
-
             let lit = syn::LitByteStr::new(bytes, proc_macro2::Span::call_site());
 
             quote! { #lit }
@@ -565,11 +595,12 @@ pub fn seed_class_to_tokens(class: &SeedClass, data_fields: &[Data]) -> syn::Res
         SeedClass::Account(ident) => quote! { #ident.address().as_ref() }, // #ident.key()
 
         SeedClass::Arg(ident) => {
-            let field = data_fields.iter()
+            let field = data_fields
+                .iter()
                 .find(|f| &f.name == ident)
-                .ok_or_else(|| syn::Error::new_spanned(
-                    ident, "internal: arg seed not found among data fields",
-                ))?;
+                .ok_or_else(|| {
+                    syn::Error::new_spanned(ident, "internal: arg seed not found among data fields")
+                })?;
 
             if is_pubkey_type(&field.ty) {
                 quote! { #ident.as_ref() }
@@ -580,8 +611,6 @@ pub fn seed_class_to_tokens(class: &SeedClass, data_fields: &[Data]) -> syn::Res
     })
 }
 
-
-
 pub fn find_accounts_param(sig: &Signature) -> syn::Result<Ident> {
     for arg in &sig.inputs {
         if let FnArg::Typed(pat_type) = arg {
@@ -591,10 +620,10 @@ pub fn find_accounts_param(sig: &Signature) -> syn::Result<Ident> {
                 }
             }
         }
-     }
+    }
 
     Err(syn::Error::new_spanned(
-        &sig.ident, 
+        &sig.ident,
         format!(
             "`{}` must take a parameter literally named `accounts` \
              (e.g. `accounts: &[AccountView]`), account bindings are located \
@@ -604,12 +633,10 @@ pub fn find_accounts_param(sig: &Signature) -> syn::Result<Ident> {
     ))
 }
 
-
-/// Accounts.Parse the list of binded accounts and scan their results to ensure they don't... 
+/// Accounts.Parse the list of binded accounts and scan their results to ensure they don't...
 /// already appear in the list of instruction.accounts the add them to ths list of instruction.accounts
 
 pub fn add_accounts(stmts: &[Stmt], accounts_param: &str, instruction: &mut Instruction) {
-
     let binded_accounts = count_account_binding(stmts, accounts_param);
 
     let new_binds: Vec<Ident> = binded_accounts
@@ -627,14 +654,11 @@ pub fn add_accounts(stmts: &[Stmt], accounts_param: &str, instruction: &mut Inst
             struct_state: None,
             address: None,
             relations: Vec::new(),
-    }).collect();
+        })
+        .collect();
 
     instruction.accounts.extend(other_accounts);
-
 }
-
-
-
 
 fn strip(mut expr: &Expr) -> &Expr {
     loop {
@@ -642,7 +666,7 @@ fn strip(mut expr: &Expr) -> &Expr {
             Expr::Reference(r) => &r.expr,
             Expr::Paren(p) => &p.expr,
             Expr::Group(g) => &g.expr,
-            _ => return expr
+            _ => return expr,
         }
     }
 }
@@ -678,14 +702,13 @@ pub fn count_account_binding(stmts: &[Stmt], accounts_param: &str) -> Vec<Ident>
 
             if let Some(init) = &local.init {
                 if is_indexed_account(&init.expr, accounts_param) {
-
                     if let Pat::Ident(pat_ident) = &local.pat {
                         binding.push(pat_ident.ident.clone());
                     }
 
                     continue;
                 }
-            } 
+            }
         } else {
             break;
         }
@@ -693,15 +716,12 @@ pub fn count_account_binding(stmts: &[Stmt], accounts_param: &str) -> Vec<Ident>
     binding
 }
 
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn it_works() {
-
         let s = r#"
             id = 1,
             accounts = [
@@ -716,7 +736,5 @@ mod tests {
 
         let parsed: Instruction = syn::parse_str(s).expect("failed to parse instruction");
         println!("{:#?}", parsed);
-
     }
-    
 }

@@ -2,18 +2,19 @@ pub mod discover;
 pub mod idl_build;
 pub mod manifest;
 
-pub use discover::{discover, Discovery, DiscoveredInstruction};
+pub use discover::{DiscoveredInstruction, Discovery, discover};
 pub use idl_build::{build_idl, write_idl};
 pub use manifest::read_metadata;
 
-use std::path::{Path, PathBuf};
 use std::fs;
+use std::path::{Path, PathBuf};
 use syn::Item;
 
 pub(crate) fn walk_rs_files(dir: &Path) -> Vec<PathBuf> {
-
     let mut files = Vec::new();
-    let Ok(entries) = fs::read_dir(dir) else { return files };
+    let Ok(entries) = fs::read_dir(dir) else {
+        return files;
+    };
 
     for entry in entries.flatten() {
         let path = entry.path();
@@ -42,8 +43,17 @@ pub(crate) fn visit_items(items: &[Item], discovery: &mut Discovery) {
                     discovery.states.push(s.clone());
                 }
             }
+            Item::Enum(e) => {
+                if find_attr(&e.attrs, "p_error").is_some() {
+                    discovery.errors.push(e.clone());
+                }
+            }
+            Item::Const(c) => {
+                if find_attr(&c.attrs, "p_constant").is_some() {
+                    discovery.constants.push(c.clone());
+                }
+            }
             Item::Macro(mac) => {
-
                 /*
                 if mac.mac.path.is_ident("declare_id") {
                     if let Ok(lit) = mac.mac.parse_body::<syn::LitStr>() {
@@ -52,7 +62,11 @@ pub(crate) fn visit_items(items: &[Item], discovery: &mut Discovery) {
                 }
                 */
 
-                let is_declare_id = mac.mac.path.segments.last()
+                let is_declare_id = mac
+                    .mac
+                    .path
+                    .segments
+                    .last()
                     .map(|seg| seg.ident == "declare_id")
                     .unwrap_or(false);
 
@@ -63,7 +77,6 @@ pub(crate) fn visit_items(items: &[Item], discovery: &mut Discovery) {
                 }
             }
             Item::Mod(m) => {
-
                 if let Some((_, inner)) = &m.content {
                     visit_items(inner, discovery);
                 }

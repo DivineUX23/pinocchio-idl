@@ -4,7 +4,7 @@
     "name": "escrow-fixture",
     "version": "0.0.0",
     "spec": "0.1.0",
-    "description": "Created with PinIDL"
+    "description": "Created with String"
   },
   "instructions": [
     {
@@ -17,6 +17,20 @@
           "name": "maker",
           "writable": true,
           "signer": true
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "relations": [
+            "escrow",
+            "mint_a"
+          ]
+        },
+        {
+          "name": "mint_a"
+        },
+        {
+          "name": "mint_b"
         },
         {
           "name": "escrow",
@@ -36,7 +50,7 @@
               },
               {
                 "kind": "account",
-                "path": "maker"
+                "path": "mint_b"
               },
               {
                 "kind": "arg",
@@ -47,22 +61,11 @@
           "state": "Escrow"
         },
         {
-          "name": "vault",
-          "writable": true,
-          "relations": [
-            "escrow",
-            "mint_a"
-          ]
-        },
-        {
           "name": "token_program",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
         },
         {
-          "name": "mint_a"
-        },
-        {
-          "name": "mint_b"
+          "name": "system_program"
         }
       ],
       "args": [
@@ -96,7 +99,28 @@
       ]
     }
   ],
-  "errors": [],
+  "errors": [
+    {
+      "code": 0,
+      "name": "AlreadyTaken",
+      "msg": "item already taken"
+    },
+    {
+      "code": 1,
+      "name": "ZeroAmount",
+      "msg": "item is zero"
+    },
+    {
+      "code": 100,
+      "name": "InvalidMint",
+      "msg": "item is invalid"
+    },
+    {
+      "code": 3,
+      "name": "Expired",
+      "msg": "item has expired"
+    }
+  ],
   "types": [
     {
       "name": "Escrow",
@@ -126,10 +150,25 @@
           {
             "name": "bump",
             "type": "u8"
+          },
+          {
+            "name": "authority",
+            "type": "option<pubkey>"
           }
         ]
       }
     }
   ],
-  "constants": []
+  "constants": [
+    {
+      "name": "MAX_ESCROW_DURATION",
+      "type": "u64",
+      "value": "60 * 60 * 24 * 30"
+    },
+    {
+      "name": "ESCROW_VERSION",
+      "type": "u8",
+      "value": "1"
+    }
+  ]
 }
