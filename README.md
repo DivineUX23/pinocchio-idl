@@ -332,19 +332,13 @@ This is a beta / capstone-phase project. The following known gaps exist:
 
 | Area | Status |
 |---|---|
-| `errors` IDL section | Always emitted as `[]` — no annotation convention for custom program errors exists yet |
-| `constants` IDL section | Always emitted as `[]` — no annotation for on-chain constants yet |
-| PDA on-chain verification | The `pda = [...]` constraint is **recorded in the IDL** for client-side derivation but the corresponding on-chain `create_program_address` check is currently disabled in the macro (marked `/* Disabled for now */` in source) |
-| Field types | `#[p_state]` and instruction data only support primitives (`u8`–`u128`, `bool`, `Pubkey`) and fixed-size arrays — `Vec`, `String`, `Option`, enums, and nested structs are not yet supported |
+| Support Pinocchio version > 0.10.0 | Pinocchio v0.10.0 introduced new account type `AccountView` and changed how PDA seeds are declared, breaking backwards compatibility. This IDL generator only supports versions up to 0.10.0. |
+| PDA on-chain verification | The `pda = [...]` constraint is **recorded in the IDL** for client-side derivation but the corresponding on-chain `create_program_address` check only wokrs for AccountView` and not for the new types like Accounts in Pinocchio version later than 0.10.0 |
 | Multi-file module re-exports | The CLI walks `src/` recursively but only discovers items declared directly with `#[p_instruction]` / `#[p_state]` — items re-exported via `pub use` from external crates are not picked up |
 | No `cargo-pinocchio-idl` integration | Must be invoked as a standalone binary; no `cargo` subcommand plugin yet |
 
 ### Roadmap Ideas
 
-- [ ] `#[p_error]` attribute to populate the `errors` IDL section
-- [ ] `#[p_constant]` attribute for on-chain constants
-- [ DONE ] Re-enable and stabilize PDA on-chain verification in the macro
-- [ ] Support `Vec<T>`, `Option<T>`, and enum field types in `#[p_state]`
 - [ ] Publish to crates.io
 - [ ] `cargo pinocchio-idl` plugin
 
