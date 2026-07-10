@@ -74,7 +74,7 @@ pub fn p_instruction(attr: TokenStream, item: TokenStream) -> TokenStream {
         if account.is_mut {
             injected_statement.push(quote! {
                 if !#name.is_writable() {
-                    return Err(ProgramError::MissingRequiredSignature)
+                    return Err(ProgramError::InvalidAccountData)
                 }
             });
         }

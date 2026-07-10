@@ -11,12 +11,13 @@ The macros do double duty: they **generate IDL metadata** _and_ **auto-inject se
 
 ## Features
 
-- **Compile-time security injection** — `#[p_instruction]` rewrites your handler at compile time to inject account-count bounds checking, per-account `signer`/`writable` guards, and **PDA on-chain verification** via `pinocchio_pubkey::derive_address`. No runtime framework, no trait vtables, just the checks you declared.
-- **`#[p_instruction(...)]`** — Declare accounts (writable, signer, PDA seeds, relations, fixed addresses) and instruction data (byte-slice extraction) in a concise attribute DSL.
+- **Compile-time security injection** — `#[p_instruction]` rewrites your handler at compile time to inject account-count bounds checking, per-account `signer`/`writable` guards, **PDA on-chain verification**, and **ATA (Associated Token Account) state verification**. No runtime framework, no trait vtables, just the checks you declared.
+- **`#[p_instruction(...)]`** — Declare accounts (writable, signer, PDA seeds, ATA, relations, fixed addresses) and instruction data (byte-slice extraction) in a concise attribute DSL.
 - **`#[p_state]`** — Derive a compile-time `SPACE` constant and an Anchor-compatible 8-byte `DISCRIMINATOR` (SHA-256 of `"account:<StructName>"`) for any account state struct. Supported field types include primitives, `Pubkey`, fixed-size arrays, `Vec<T>`, and `Option<T>`.
 - **`#[p_error]`** — Annotate an error enum to have all its variants automatically emitted into the `errors` section of the IDL, with human-readable messages taken from doc comments and optional `#[p_code = N]` overrides.
 - **`#[p_constant]`** — Annotate any `const` item to have its name, type, and value emitted into the `constants` section of the IDL.
 - **Anchor + Codama compatible IDL** — The generated `idl.json` satisfies the Anchor IDL spec and is directly consumable by [Codama](https://github.com/codama-idl/codama) for client generation.
+- **Well-known Program Resolution** — Accounts assigned a known address (like the Token Program or System Program) automatically have their names resolved to the canonical IDL names (`tokenProgram`, `systemProgram`).
 - **Zero runtime overhead** — All macro expansion happens at Rust compile time. The CLI is a pure static-analysis tool that never invokes the compiler.
 - **Zero framework wrappers** — No Anchor, no additional runtime traits or abstractions. Your Pinocchio program stays exactly as lean as you wrote it.
 
@@ -129,7 +130,7 @@ Supported field types:
 | `[u8; 32]` | `pubkey` | 32 |
 | `[T; N]` | `[T; N]` | elem × N |
 | `Vec<T>` | `vec<T>` | 4 (length prefix only) |
-| `Option<T>` | `option<T>` | 1 + size(T) |
+| `Option<T>` | `{"option": T}` | 1 + size(T) |
 | Custom enum / struct | name as-is | error — use a primitive wrapper |
 
 ---
@@ -170,9 +171,10 @@ pub fn process_make_instruction(accounts: &[AccountView], data: &[u8]) -> Progra
 |---|---|---|
 | Writable | `mut` | Validates `account.is_writable()` at runtime |
 | Signer | `signer` | Validates `account.is_signer()` at runtime |
-| PDA seeds | `pda = ["literal", account_name, arg_name]` | Recorded in IDL **and** verified on-chain via `pinocchio_pubkey::derive_address` |
+| PDA seeds | `pda = ["literal", acc_name, arg_name, program = "Base58..."]` | Recorded in IDL **and** verified on-chain. `program` override is optional (defaults to `crate::ID`). |
+| ATA checks | `ata = [owner_acc, mint_acc]` | Recorded in IDL **and** on-chain owner/mint validation via `pinocchio_token::state::Account` |
 | Linked state | `state = StructName` | Associates an account with its `#[p_state]` type |
-| Fixed address | `address = "Base58..."` | Records a known program/sysvar address in the IDL |
+| Fixed address | `address = "Base58..."` | Records a known program/sysvar address in the IDL. Auto-resolves known names like `tokenProgram`. |
 | Relations | `relations = [other, another]` | Records account relationships in the IDL |
 
 **Data field syntax:** `field_name: Type = data[start..end]` or `data[index]`
@@ -366,8 +368,18 @@ The generated `idl.json` follows the Anchor IDL spec and is also **Codama compat
       "discriminator": [0],
       "accounts": [
         { "name": "maker", "writable": true, "signer": true },
-        { "name": "escrow", "writable": true, "pdaSeeds": { "seeds": [...] } },
-        ...
+        { 
+          "name": "escrow", 
+          "writable": true, 
+          "pda": { 
+             "seeds": [
+               { "kind": "const", "value": [101, 115, 99, 114, 111, 119] },
+               { "kind": "account", "path": "maker" },
+               { "kind": "arg", "path": "seed" }
+             ]
+          } 
+        },
+        { "name": "tokenProgram", "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" }
       ],
       "args": [
         { "name": "seed",    "type": "u64" },
@@ -385,7 +397,7 @@ The generated `idl.json` follows the Anchor IDL spec and is also **Codama compat
         "fields": [
           { "name": "seed",      "type": "u64" },
           { "name": "maker",     "type": "pubkey" },
-          { "name": "authority", "type": "option<pubkey>" }
+          { "name": "authority", "type": { "option": "pubkey" } }
         ]
       }
     }
@@ -437,8 +449,7 @@ This is a beta / capstone-phase project. The following known gaps exist:
 
 - [ ] Publish to crates.io
 - [ ] `cargo pinocchio-idl` plugin
-- [ ] Well-known program address auto-resolution (e.g. `TokenProgram` → `TokenkegQ...`, `SystemProgram` → `111...`, `AssociatedTokenProgram` → `ATokenGP...`)
+- [x] Well-known program address auto-resolution
 - [ ] `p_parse!` declarative macro for inline account unpacking + data parsing + security guards in a single call-site macro
 
-
-Support this style: let maker = accounts.get(0).ok_or(ProgramError::NotEnoughAccountKeys)?;
+Support this style: `let maker = accounts.get(0).ok_or(ProgramError::NotEnoughAccountKeys)?;`
