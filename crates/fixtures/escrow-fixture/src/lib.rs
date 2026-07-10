@@ -69,6 +69,15 @@ pub fn process_make_instruction(accounts: &mut [AccountView], data: &[u8]) -> Pr
     let escrow = &accounts[4];
     let token_program = &accounts[5];
     let system_program = &accounts[6];
+
+
+    let maker = accounts.get(0).ok_or(ProgramError::NotEnoughAccountKeys)?;
+    let vault = accounts.get(1).ok_or(ProgramError::NotEnoughAccountKeys)?;
+    let mint_a = accounts.get(2).ok_or(ProgramError::NotEnoughAccountKeys)?;
+    let mint_b = accounts.get(3).ok_or(ProgramError::NotEnoughAccountKeys)?;
+    let escrow = accounts.get(4).ok_or(ProgramError::NotEnoughAccountKeys)?;
+    let token_program = accounts.get(5).ok_or(ProgramError::NotEnoughAccountKeys)?;
+    let system_program = accounts.get(6).ok_or(ProgramError::NotEnoughAccountKeys)?;
     */
 
     let _disc = Escrow::DISCRIMINATOR;

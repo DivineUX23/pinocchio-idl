@@ -258,6 +258,25 @@ fn is_indexed_account(expr: &Expr, name: &str) -> bool {
         _ => false,
     }
 }
+
+fn is_get_account(mut expr: &Expr, name: &str) -> bool {
+    let mut has_get = false;
+    loop {
+        expr = strip(expr);
+        match expr {
+            Expr::Try(t) => expr = &t.expr,
+            Expr::MethodCall(m) => {
+                let method_name = m.method.to_string();
+                if method_name == "get" || method_name == "get_mut" || method_name == "next" {
+                    has_get = true;
+                }
+                expr = &m.receiver;
+            }
+            Expr::Path(p) => return has_get && p.path.is_ident(name),
+            _ => return false,
+        }
+    }
+}
 fn count_account_binding(stmts: &[Stmt], accounts_param: &str) -> usize {
     let mut index = 0;
 
@@ -273,7 +292,7 @@ fn count_account_binding(stmts: &[Stmt], accounts_param: &str) -> usize {
             }
 
             if let Some(init) = &local.init {
-                if is_indexed_account(&init.expr, accounts_param) {
+                if is_indexed_account(&init.expr, accounts_param) || is_get_account(&init.expr, accounts_param) {
                     index = i + 1;
                     continue;
                 }

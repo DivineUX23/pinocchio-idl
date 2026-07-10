@@ -255,15 +255,16 @@ impl Account {
                 .transpose()?;
         }
 
-        let address_val = self.address.as_ref().map(|lit| lit.value());
+        let mut address_val = self.address.as_ref().map(|lit| lit.value());
+        let raw_name = self.name.to_string().trim_start_matches('_').to_string();
+        let mut idl_name = raw_name.clone();
 
-        let canonical_name = address_val
-            .as_deref()
-            .and_then(static_program)
-            .map(|s| s.to_string());
+        let lookup_key = address_val.as_deref().unwrap_or(raw_name.as_str());
 
-        let idl_name = canonical_name
-            .unwrap_or_else(|| self.name.to_string().trim_start_matches('_').to_string());
+        if let Some((canonical_name, canonical_address)) = known_program(lookup_key) {
+            idl_name = canonical_name.to_string();
+            address_val = Some(canonical_address.to_string());
+        }
 
         Ok(IdlAccount {
             name: idl_name,
@@ -279,14 +280,37 @@ impl Account {
     }
 }
 
-pub fn static_program(address: &str) -> Option<&'static str> {
-    match address {
-        "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" => Some("tokenProgram"),
-        "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb" => Some("token2022Program"),
-        "11111111111111111111111111111111" => Some("systemProgram"),
-        "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL" => Some("associatedTokenProgram"),
-        "SysvarRent111111111111111111111111111111111" => Some("sysvarRent"),
-        "SysvarC1ock11111111111111111111111111111111" => Some("sysvarClock"),
+pub fn known_program(name_or_address: &str) -> Option<(&'static str, &'static str)> {
+    match name_or_address {
+        "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" | "token_program" | "tokenProgram" => Some((
+            "token_program",
+            "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+        )),
+        "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+        | "token_2022_program"
+        | "token2022Program" => Some((
+            "token_2022_program",
+            "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb",
+        )),
+        "11111111111111111111111111111111" | "system_program" | "systemProgram" => {
+            Some(("system_program", "11111111111111111111111111111111"))
+        }
+        "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        | "associated_token_program"
+        | "associatedTokenProgram" => Some((
+            "associated_token_program",
+            "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL",
+        )),
+        "SysvarRent111111111111111111111111111111111" | "rent" | "sysvarRent" | "rent_sysvar" => {
+            Some(("rent_sysvar", "SysvarRent111111111111111111111111111111111"))
+        }
+        "SysvarC1ock11111111111111111111111111111111"
+        | "clock"
+        | "sysvarClock"
+        | "clock_sysvar" => Some((
+            "clock_sysvar",
+            "SysvarC1ock11111111111111111111111111111111",
+        )),
         _ => None,
     }
 }

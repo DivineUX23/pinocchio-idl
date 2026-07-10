@@ -26,29 +26,36 @@ fn builds_idl_from_fixture() {
     let make = &idl.instructions[0];
     //assert_eq!(make.name, "make");
     assert_eq!(make.discriminator, vec![0]);
-    assert_eq!(make.accounts.len(), 6);
+    assert_eq!(make.accounts.len(), 7);
 
     let escrow = make.accounts.iter().find(|a| a.name == "escrow").unwrap();
     assert!(escrow.pda.is_some());
     assert_eq!(escrow.state.as_deref(), Some("Escrow"));
 
     let vault = make.accounts.iter().find(|a| a.name == "vault").unwrap();
-    assert_eq!(
-        vault.relations.as_deref(),
-        Some(&["escrow".to_string(), "mint_a".to_string()][..])
-    );
+    assert!(vault.pda.is_some()); // Since ata generates a pda block
 
     let token_program = make
         .accounts
         .iter()
-        .find(|a| a.name == "token_program")
+        .find(|a| a.name == "tokenProgram")
         .unwrap();
     assert_eq!(
         token_program.address.as_deref(),
         Some("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
     );
 
+    let system_program = make
+        .accounts
+        .iter()
+        .find(|a| a.name == "systemProgram")
+        .unwrap();
+    assert_eq!(
+        system_program.address.as_deref(),
+        Some("11111111111111111111111111111111")
+    );
+
     assert_eq!(idl.accounts[0].name, "Escrow");
     assert_eq!(idl.accounts[0].discriminator.len(), 8);
-    assert_eq!(idl.types[0].r#type.fields.len(), 6);
+    assert_eq!(idl.types[0].r#type.fields.len(), 7);
 }
