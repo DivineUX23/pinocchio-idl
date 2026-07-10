@@ -434,7 +434,7 @@ cargo test --workspace
 
 ## Limitations & Roadmap
 
-This is a beta / capstone-phase project. The following known gaps exist:
+This is a beta project. The following known gaps exist:
 
 ### Current Limitations
 
@@ -445,6 +445,34 @@ This is a beta / capstone-phase project. The following known gaps exist:
 | No `cargo-pinocchio-idl` integration | Must be invoked as a standalone binary; no `cargo` subcommand plugin yet. |
 | Enum / struct field types in `#[p_state]` | Custom enum or nested struct fields are not sized automatically. Use a primitive or `[u8; N]` wrapper, or size the account manually. |
 
+
+
+### Supported Account Binding Styles
+
+The `#[p_instruction]` macro parses your function body to automatically discover your account variables. It currently supports three common binding patterns:
+
+**1. Array Destructuring:**
+```rust
+let [maker, vault, ...] = accounts else {
+    return Err(ProgramError::NotEnoughAccountKeys);
+};
+```
+
+**2. Direct Indexing:**
+```rust
+let maker = &accounts[0];
+let vault = &accounts[1];
+...
+```
+
+**3. Method Calls (`get` / `get_mut` / `next`):**
+```rust
+let maker = accounts.get(0).ok_or(ProgramError::NotEnoughAccountKeys)?;
+let vault = accounts.get(1).ok_or(ProgramError::NotEnoughAccountKeys)?;
+...
+```
+
+
 ### Roadmap
 
 - [ ] Publish to crates.io
@@ -452,4 +480,3 @@ This is a beta / capstone-phase project. The following known gaps exist:
 - [x] Well-known program address auto-resolution
 - [ ] `p_parse!` declarative macro for inline account unpacking + data parsing + security guards in a single call-site macro
 
-Support this style: `let maker = accounts.get(0).ok_or(ProgramError::NotEnoughAccountKeys)?;`
