@@ -36,6 +36,6 @@ pub fn read_metadata(manifest_path: &Path) -> syn::Result<Metadata> {
         description: parsed
             .package
             .description
-            .unwrap_or_else(|| "Created with String".to_string()),
+            .unwrap_or_else(|| "Created with Pinocchio-IDL".to_string()),
     })
 }

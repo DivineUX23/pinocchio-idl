@@ -9,10 +9,8 @@ pub struct Idl {
     pub accounts: Vec<IdlAccountDef>,
     pub errors: Vec<IdlError>,
     pub types: Vec<IdlTypeDefinition>,
-    pub constants: Vec<IdlConstant>
+    pub constants: Vec<IdlConstant>,
 }
-
-
 
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -23,24 +21,20 @@ pub struct Metadata {
     pub description: String,
 }
 
-
-
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct IdlInstruction {
     pub name: String,
     pub discriminator: Vec<u8>,
     pub accounts: Vec<IdlAccount>,
-    pub args: Option<Vec<IdlArg>>
+    pub args: Option<Vec<IdlArg>>,
 }
-
-
 
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct IdlAccount {
     pub name: String,
-    
+
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub writable: bool,
 
@@ -54,31 +48,95 @@ pub struct IdlAccount {
     pub relations: Option<Vec<String>>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub pda_seeds: Option<IdlPda>,
+    pub pda: Option<IdlPda>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub state: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FieldType {
+    Simple(String),
+    Array(Box<FieldType>, usize),
+    Vec(Box<FieldType>),
+    Option(Box<FieldType>),
+    Defined(String),
+}
+
+impl serde::Serialize for FieldType {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+
+        match self {
+            FieldType::Simple(name) => s.serialize_str(name),
+            FieldType::Array(inner, len) => {
+                use serde::ser::SerializeSeq;
+                struct ArrayTuple<'a>(&'a FieldType, usize);
+
+                impl serde::Serialize for ArrayTuple<'_> {
+                    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+                        let mut seq = s.serialize_seq(Some(2))?;
+                        seq.serialize_element(self.0)?;
+                        seq.serialize_element(&self.1)?;
+                        seq.end()
+                    }
+                }
+
+                let mut map = s.serialize_map(Some(1))?;
+                map.serialize_entry("array", &ArrayTuple(inner, *len))?;
+                map.end()
+            }
+
+            // { "vec": <inner> }
+            FieldType::Vec(inner) => {
+                let mut map = s.serialize_map(Some(1))?;
+                map.serialize_entry("vec", inner.as_ref())?;
+                map.end()
+            }
+
+            // { "option": <inner> }
+            FieldType::Option(inner) => {
+                let mut map = s.serialize_map(Some(1))?;
+                map.serialize_entry("option", inner.as_ref())?;
+                map.end()
+            }
+
+            // { "defined": "MyStruct" }
+            FieldType::Defined(name) => {
+                let mut map = s.serialize_map(Some(1))?;
+                map.serialize_entry("defined", name)?;
+                map.end()
+            }
+        }
+    }
+}
+
+impl std::fmt::Display for FieldType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FieldType::Simple(s) => write!(f, "{s}"),
+            FieldType::Array(inner, len) => write!(f, "[{inner}; {len}]"),
+            FieldType::Vec(inner) => write!(f, "vec<{inner}>"),
+            FieldType::Option(inner) => write!(f, "option<{inner}>"),
+            FieldType::Defined(name) => write!(f, "{name}"),
+        }
+    }
+}
 
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct IdlArg {
     pub name: String,
-    pub r#type: String
+    pub r#type: FieldType,
 }
-
-
 
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct IdlPda {
     pub seeds: Vec<IdlPdaSeed>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub program: Option<IdlPdaProgram>
+    pub program: Option<IdlPdaProgram>,
 }
-
-
 
 #[derive(Serialize, Debug)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -96,66 +154,53 @@ pub enum IdlPdaSeed {
     },
 }
 
-
-
 #[derive(Serialize, Debug)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum IdlPdaProgram {
-    Const { value: Vec<u8> }
+    Const { value: Vec<u8> },
+    Account { path: String },
 }
-
-
 
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct IdlAccountDef {
     pub name: String,
-    pub discriminator: Vec<u8>
+    pub discriminator: Vec<u8>,
 }
-
-
 
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct IdlError {
     pub code: u32,
     pub name: String,
-    pub msg: String
+    pub msg: String,
 }
-
-
 
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct IdlTypeDefinition {
     pub name: String,
-    pub r#type: IdlType
+    pub r#type: IdlType,
 }
-
-
 
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct IdlType {
     pub kind: String,
-    pub fields: Vec<IdlField>
+    pub fields: Vec<IdlField>,
 }
-
-
 
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct IdlField {
     pub name: String,
-    pub r#type: String,
+    pub r#type: FieldType,
 }
-
-
 
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct IdlConstant {
     pub name: String,
-    pub r#type: String,
-    pub value: String
+    pub r#type: FieldType,
+    pub value: String,
 }

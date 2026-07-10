@@ -439,3 +439,6 @@ This is a beta / capstone-phase project. The following known gaps exist:
 - [ ] `cargo pinocchio-idl` plugin
 - [ ] Well-known program address auto-resolution (e.g. `TokenProgram` → `TokenkegQ...`, `SystemProgram` → `111...`, `AssociatedTokenProgram` → `ATokenGP...`)
 - [ ] `p_parse!` declarative macro for inline account unpacking + data parsing + security guards in a single call-site macro
+
+
+Support this style: let maker = accounts.get(0).ok_or(ProgramError::NotEnoughAccountKeys)?;

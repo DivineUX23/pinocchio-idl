@@ -6,9 +6,7 @@ use pinocchio_idl_core::{
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{
-    Expr, ExprLit, Fields, Ident, ItemFn, ItemStruct, Lit, Pat, Stmt, Type, parse_macro_input,
-};
+use syn::{Expr, ExprLit, Fields, ItemFn, ItemStruct, Lit, Pat, Stmt, Type, parse_macro_input};
 
 /*
 pub mod program_error {
@@ -41,12 +39,6 @@ pub fn p_instruction(attr: TokenStream, item: TokenStream) -> TokenStream {
         .as_ref()
         .map(|fields| fields.iter().map(|f| f.name.to_string()).collect())
         .unwrap_or_default();
-
-    let bump_field: Option<Ident> = parsed_attr
-        .data
-        .as_ref()
-        .and_then(|fields| fields.iter().find(|d| d.name == "bump"))
-        .map(|d| d.name.clone());
 
     //if parsed_attr.data.is_some() {
     if let Some(data) = &parsed_attr.data {
@@ -95,10 +87,57 @@ pub fn p_instruction(attr: TokenStream, item: TokenStream) -> TokenStream {
             });
         }
 
-        /* Disabled for now */
-        if let Some(pda_seeds) = &account.pda_seeds {
-            let seed_classes: Vec<_> = match pda_seeds
+        if let Some(ata) = &account.ata {
+            if ata.0.len() != 2 {
+                return syn::Error::new_spanned(
+                    &name,
+                    "ata = [...] requires exactly two expressions: [owner_account, mint_account]",
+                )
+                .to_compile_error()
+                .into();
+            }
+
+            let owner_classes: Vec<_> = match ata
                 .0
+                .iter()
+                .map(|expr| classify_seed(expr, &account_names, &arg_names))
+                .collect()
+            {
+                Ok(c) => c,
+                Err(e) => return e.to_compile_error().into(),
+            };
+
+            use pinocchio_idl_core::SeedClass;
+            let make_address_expr = |class: &SeedClass| -> TokenStream2 {
+                match class {
+                    SeedClass::Account(ident) => quote! { #ident.address() },
+                    SeedClass::Arg(ident) => quote! { ::pinocchio::Address::from(*#ident) },
+                    SeedClass::Bytes(bytes) => {
+                        let lit = proc_macro2::Literal::byte_string(bytes);
+                        quote! { ::pinocchio::Address::from(#lit) }
+                    }
+                }
+            };
+
+            let owner_expr = make_address_expr(&owner_classes[0]);
+            let mint_expr = make_address_expr(&owner_classes[1]);
+
+            injected_statement.push(quote! {
+                {
+                    let __ata_state = ::pinocchio_token::state::Account::from_account_view(#name)?;
+                    if __ata_state.owner() != #owner_expr {
+                        return Err(ProgramError::IllegalOwner);
+                    }
+                    if __ata_state.mint() != #mint_expr {
+                        return Err(ProgramError::InvalidAccountData);
+                    }
+                }
+            });
+        }
+
+        if let Some(pda) = &account.pda {
+            let seed_classes: Vec<_> = match pda
+                .seeds
                 .iter()
                 .map(|expr| classify_seed(expr, &account_names, &arg_names))
                 .collect()
@@ -118,29 +157,37 @@ pub fn p_instruction(attr: TokenStream, item: TokenStream) -> TokenStream {
                 Err(e) => return e.to_compile_error().into(),
             };
 
-            let bump_ident =
-                match &bump_field {
-                    Some(ident) => ident,
-                    None => {
-                        return syn::Error::new_spanned(
-                        &name,
-                        "pda verification requires a `bump: u8 = data[N]` field in `data = [...]`",
-                    ).to_compile_error().into();
-                    }
-                };
+            use pinocchio_idl_core::PdaProgram;
+
+            let program_expr: TokenStream2 = match &pda.program {
+                None => quote! { &crate::ID.to_bytes() },
+
+                Some(PdaProgram::Literal(lit)) => {
+                    let s = lit.value();
+
+                    let bytes = pinocchio_idl_core::bs58_decode(s.as_str())
+                        .unwrap_or_else(|e| panic!("{e}"));
+
+                    quote! { &[ #(#bytes),* ] }
+                }
+
+                Some(PdaProgram::Account(ident)) => {
+                    quote! { #ident.address().as_ref() }
+                }
+            };
 
             injected_statement.push(quote! {
-
-                let pda_seeds: &[&[u8]] = &[#(#seed_tokens),*];
-
-                let expected_pda = ::pinocchio::Address::from(pinocchio_pubkey::derive_address(
-                    &[#(#seed_tokens),*, &[#bump_ident]],
-                    None,
-                    &crate::ID.to_bytes(),
-                ));
-
-                if #name.address() != &expected_pda {
-                    return Err(ProgramError::InvalidArgument);
+                {
+                    let __expected_pda = ::pinocchio::Address::from(
+                        pinocchio_pubkey::derive_address(
+                            &[#(#seed_tokens),*],
+                            None,
+                            #program_expr,
+                        )
+                    );
+                    if #name.address() != &__expected_pda {
+                        return Err(ProgramError::InvalidArgument);
+                    }
                 }
             });
         }

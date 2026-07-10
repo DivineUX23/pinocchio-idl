@@ -4,7 +4,7 @@
     "name": "escrow-fixture",
     "version": "0.0.0",
     "spec": "0.1.0",
-    "description": "Created with String"
+    "description": "Created with Pinocchio-IDL"
   },
   "instructions": [
     {
@@ -21,10 +21,55 @@
         {
           "name": "vault",
           "writable": true,
-          "relations": [
-            "escrow",
-            "mint_a"
-          ]
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "escrow"
+              },
+              {
+                "kind": "account",
+                "path": "mint_a"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
         },
         {
           "name": "mint_a"
@@ -35,7 +80,7 @@
         {
           "name": "escrow",
           "writable": true,
-          "pdaSeeds": {
+          "pda": {
             "seeds": [
               {
                 "kind": "const",
@@ -61,7 +106,7 @@
           "state": "Escrow"
         },
         {
-          "name": "token_program",
+          "name": "tokenProgram",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
         },
         {
@@ -141,7 +186,12 @@
           },
           {
             "name": "mint_b",
-            "type": "pubkey"
+            "type": {
+              "array": [
+                "u8",
+                8
+              ]
+            }
           },
           {
             "name": "receive",
@@ -153,7 +203,9 @@
           },
           {
             "name": "authority",
-            "type": "option<pubkey>"
+            "type": {
+              "option": "pubkey"
+            }
           }
         ]
       }

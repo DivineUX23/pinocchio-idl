@@ -33,7 +33,7 @@ pub struct Escrow {
     pub seed: u64,
     pub maker: [u8; 32],
     pub mint_a: [u8; 32],
-    pub mint_b: [u8; 32],
+    pub mint_b: [u8; 8],
     pub receive: u64,
     pub bump: u8,
     pub authority: Option<[u8; 32]>,
@@ -43,7 +43,7 @@ pub struct Escrow {
     id = 0,
     accounts = [
         maker(signer, mut),
-        vault(mut, relations=[escrow, mint_a]),
+        vault(mut, ata=[escrow, mint_a]),
         mint_a,
         mint_b,
         escrow(mut, pda=["escrow", mint_b, seed], state=Escrow),
@@ -60,6 +60,16 @@ pub fn process_make_instruction(accounts: &mut [AccountView], data: &[u8]) -> Pr
     let [maker, vault, mint_a, mint_b, escrow, token_program, system_program] = accounts else {
         return Err(ProgramError::NotEnoughAccountKeys);
     };
+
+    /*
+    let maker = &accounts[0];
+    let vault = &accounts[1];
+    let mint_a = &accounts[2];
+    let mint_b = &accounts[3];
+    let escrow = &accounts[4];
+    let token_program = &accounts[5];
+    let system_program = &accounts[6];
+    */
 
     let _disc = Escrow::DISCRIMINATOR;
     let _space = Escrow::SPACE;
@@ -89,7 +99,7 @@ pub fn process_make_instruction(accounts: &mut [AccountView], data: &[u8]) -> Pr
     let mut mint_a_bytes = [0u8; 32];
     mint_a_bytes.copy_from_slice(mint_a.address().as_ref());
 
-    let mut mint_b_bytes = [0u8; 32];
+    let mut mint_b_bytes = [0u8; 8];
     mint_b_bytes.copy_from_slice(mint_b.address().as_ref());
 
     escrow_data.maker = maker_bytes;
