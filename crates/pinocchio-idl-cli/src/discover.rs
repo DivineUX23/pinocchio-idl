@@ -5,14 +5,15 @@ use syn::{ItemConst, ItemEnum, ItemFn, ItemStruct};
 pub struct DiscoveredInstruction {
     pub func: ItemFn,
     pub attr_tokens: proc_macro2::TokenStream,
+    pub file: std::path::PathBuf,
 }
 
 #[derive(Default)]
 pub struct Discovery {
     pub instructions: Vec<DiscoveredInstruction>,
-    pub states: Vec<ItemStruct>,
-    pub errors: Vec<ItemEnum>,
-    pub constants: Vec<ItemConst>,
+    pub states: Vec<(ItemStruct, std::path::PathBuf)>,
+    pub errors: Vec<(ItemEnum, std::path::PathBuf)>,
+    pub constants: Vec<(ItemConst, std::path::PathBuf)>,
     pub program_id: Option<String>,
 }
 
@@ -33,7 +34,7 @@ pub fn discover(src_dir: &Path) -> syn::Result<Discovery> {
                 format!("parsing {}: {e}", path.display()),
             )
         })?;
-        visit_items(&file.items, &mut discovery);
+        visit_items(&file.items, &mut discovery, &path);
     }
 
     Ok(discovery)

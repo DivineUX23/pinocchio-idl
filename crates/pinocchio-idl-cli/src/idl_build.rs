@@ -2,12 +2,22 @@ use quote::ToTokens;
 use std::{fs, path::Path};
 use syn::{Fields, ItemConst, ItemEnum, ItemStruct, Lit};
 
+
 use pinocchio_idl_core::{
     Idl, IdlAccountDef, IdlConstant, IdlError, IdlField, IdlType, IdlTypeDefinition, Instruction,
     Metadata, account_discriminator, derive_instruction_name, find_accounts_param, rust_to_idl,
 };
 
 use crate::discover::discover;
+
+fn format_syn_error(err: syn::Error, file: &Path) -> anyhow::Error {
+    let mut msgs = Vec::new();
+    for e in err.into_iter() {
+        let span = e.span().start();
+        msgs.push(format!("{} at {}:{}:{}", e, file.display(), span.line, span.column));
+    }
+    anyhow::anyhow!("{}", msgs.join("\n"))
+}
 
 fn state_to_idl(item: &ItemStruct) -> syn::Result<(IdlAccountDef, IdlTypeDefinition)> {
     let name = item.ident.to_string();
@@ -138,37 +148,44 @@ fn constant_from_item(item: &ItemConst) -> syn::Result<IdlConstant> {
     })
 }
 
-pub fn build_idl(src_dir: &Path, metadata: Metadata) -> syn::Result<Idl> {
-    let discovery = discover(src_dir)?;
+pub fn build_idl(src_dir: &Path, metadata: Metadata) -> anyhow::Result<Idl> {
+    let discovery = discover(src_dir).map_err(|e| anyhow::anyhow!("Discovery error: {}", e))?;
+
+    if discovery.instructions.is_empty() && discovery.states.is_empty() {
+        anyhow::bail!("No #[p_instruction] or #[p_state] annotations found in {}", src_dir.display());
+    }
 
     let instructions = discovery
         .instructions
         .iter()
         .enumerate()
         .map(|(index, discovered)| {
-            let mut instruction: Instruction = syn::parse2(discovered.attr_tokens.clone())?;
+            let mut instruction: Instruction = syn::parse2(discovered.attr_tokens.clone())
+                .map_err(|e| format_syn_error(e, &discovered.file))?;
 
-            let accounts_ident = find_accounts_param(&discovered.func.sig)?;
+            let accounts_ident = find_accounts_param(&discovered.func.sig)
+                .map_err(|e| format_syn_error(e, &discovered.file))?;
             instruction.add_accounts(&discovered.func.block.stmts, &accounts_ident.to_string());
 
             let name = derive_instruction_name(&discovered.func.sig.ident);
             instruction.into_idl(name, index as u8)
+                .map_err(|e| format_syn_error(e, &discovered.file))
         })
-        .collect::<syn::Result<Vec<_>>>()?;
+        .collect::<anyhow::Result<Vec<_>>>()?;
 
     let (accounts, types): (Vec<_>, Vec<_>) = discovery
         .states
         .iter()
-        .map(state_to_idl)
-        .collect::<syn::Result<Vec<_>>>()?
+        .map(|(s, file)| state_to_idl(s).map_err(|e| format_syn_error(e, file)))
+        .collect::<anyhow::Result<Vec<_>>>()?
         .into_iter()
         .unzip();
 
     let errors: Vec<IdlError> = discovery
         .errors
         .iter()
-        .map(|e: &ItemEnum| errors_from_enum(e))
-        .collect::<syn::Result<Vec<Vec<_>>>>()?
+        .map(|(e, file)| errors_from_enum(e).map_err(|err| format_syn_error(err, file)))
+        .collect::<anyhow::Result<Vec<Vec<_>>>>()?
         .into_iter()
         .flatten()
         .collect();
@@ -176,8 +193,8 @@ pub fn build_idl(src_dir: &Path, metadata: Metadata) -> syn::Result<Idl> {
     let constants: Vec<IdlConstant> = discovery
         .constants
         .iter()
-        .map(|c: &ItemConst| constant_from_item(c))
-        .collect::<syn::Result<Vec<_>>>()?;
+        .map(|(c, file)| constant_from_item(c).map_err(|e| format_syn_error(e, file)))
+        .collect::<anyhow::Result<Vec<_>>>()?;
 
     Ok(Idl {
         address: discovery.program_id.unwrap_or_default(),

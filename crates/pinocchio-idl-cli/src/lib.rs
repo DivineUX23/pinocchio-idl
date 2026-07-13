@@ -27,7 +27,7 @@ pub(crate) fn walk_rs_files(dir: &Path) -> Vec<PathBuf> {
     files
 }
 
-pub(crate) fn visit_items(items: &[Item], discovery: &mut Discovery) {
+pub(crate) fn visit_items(items: &[Item], discovery: &mut Discovery, file_path: &Path) {
     for item in items {
         match item {
             Item::Fn(func) => {
@@ -35,22 +35,23 @@ pub(crate) fn visit_items(items: &[Item], discovery: &mut Discovery) {
                     discovery.instructions.push(DiscoveredInstruction {
                         func: func.clone(),
                         attr_tokens: attr_tokens(attr),
+                        file: file_path.to_path_buf(),
                     });
                 }
             }
             Item::Struct(s) => {
                 if find_attr(&s.attrs, "p_state").is_some() {
-                    discovery.states.push(s.clone());
+                    discovery.states.push((s.clone(), file_path.to_path_buf()));
                 }
             }
             Item::Enum(e) => {
                 if find_attr(&e.attrs, "p_error").is_some() {
-                    discovery.errors.push(e.clone());
+                    discovery.errors.push((e.clone(), file_path.to_path_buf()));
                 }
             }
             Item::Const(c) => {
                 if find_attr(&c.attrs, "p_constant").is_some() {
-                    discovery.constants.push(c.clone());
+                    discovery.constants.push((c.clone(), file_path.to_path_buf()));
                 }
             }
             Item::Macro(mac) => {
@@ -78,7 +79,7 @@ pub(crate) fn visit_items(items: &[Item], discovery: &mut Discovery) {
             }
             Item::Mod(m) => {
                 if let Some((_, inner)) = &m.content {
-                    visit_items(inner, discovery);
+                    visit_items(inner, discovery, file_path);
                 }
             }
             _ => {}

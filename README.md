@@ -23,12 +23,18 @@ The macros do double duty: they **generate IDL metadata** _and_ **auto-inject se
 
 ---
 
-## Workspace Layout
+## Workspace Crates
 
-```
+This repository contains three main crates, which all share this single README:
+
+- **[`pinocchio-idl-cli`](crates/pinocchio-idl-cli/)**: The command-line interface (`pinocchio-idl build`). This is what you install on your machine to generate IDLs.
+- **[`pinocchio-idl-macros`](crates/pinocchio-idl-macros/)**: The proc-macro crate providing `#[p_instruction]`, `#[p_state]`, etc. You add this directly to your Pinocchio program's dependencies.
+- **[`pinocchio-idl-core`](crates/pinocchio-idl-core/)**: Shared parsing types and IDL serialization structs. **Note:** This is an internal transitive dependency used by the CLI and macros. You do **not** need to depend on this crate directly.
+
+```text
 pinocchio-idl/
 ├── crates/
-│   ├── pinocchio-idl-core/      # Shared parsing types & IDL structs
+│   ├── pinocchio-idl-core/      # Shared parsing types & IDL structs (internal)
 │   ├── pinocchio-idl-macros/    # Proc-macro crate (#[p_instruction], #[p_state])
 │   ├── pinocchio-idl-cli/       # CLI binary (pinocchio-idl build)
 │   └── fixtures/
@@ -477,6 +483,5 @@ let vault = accounts.get(1).ok_or(ProgramError::NotEnoughAccountKeys)?;
 
 - [ ] Publish to crates.io
 - [ ] `cargo pinocchio-idl` plugin
-- [x] Well-known program address auto-resolution
 - [ ] `p_parse!` declarative macro for inline account unpacking + data parsing + security guards in a single call-site macro
 
