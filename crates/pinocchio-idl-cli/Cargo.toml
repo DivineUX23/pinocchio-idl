@@ -27,3 +27,5 @@ toml = { workspace = true }
 clap = { workspace = true }
 pinocchio-idl-core = { version = "0.1.0", path = "../pinocchio-idl-core" }
 anyhow = "1.0.103"
+cargo_toml = "1.0.0"
+ignore = "0.4.28"

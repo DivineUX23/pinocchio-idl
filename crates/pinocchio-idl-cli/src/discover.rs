@@ -1,4 +1,5 @@
 use crate::{visit_items, walk_rs_files};
+use anyhow::{Context, Result};
 use std::{fs, path::Path};
 use syn::{ItemConst, ItemEnum, ItemFn, ItemStruct};
 
@@ -16,7 +17,41 @@ pub struct Discovery {
     pub constants: Vec<(ItemConst, std::path::PathBuf)>,
     pub program_id: Option<String>,
 }
+/*
+impl Discovery {
+    fn merge(mut self, other: Self) -> Self {
+        self.instructions.extend(other.instructions);
+        self.states.extend(other.states);
+        self.errors.extend(other.errors);
+        self.constants.extend(other.constants);
 
+        if other.program_id.is_some() {
+            self.program_id = other.program_id;
+        }
+        self
+    }
+}
+    */
+
+pub fn discover(src_dir: &Path) -> Result<Discovery> {
+    let files: Vec<_> = walk_rs_files(src_dir);
+
+    let mut discovery = Discovery::default();
+
+    for path in files {
+        let content = fs::read_to_string(&path)
+            .with_context(|| format!("Disk I/O failed while reading {}", path.display()))?;
+
+        let file = syn::parse_file(&content)
+            .map_err(|e| anyhow::anyhow!("AST Parse Error in {}: {e}", path.display()))?;
+
+        visit_items(&file.items, &mut discovery, &path);
+    }
+
+    Ok(discovery)
+}
+
+/*
 pub fn discover(src_dir: &Path) -> syn::Result<Discovery> {
     let mut discovery = Discovery::default();
 
@@ -39,3 +74,4 @@ pub fn discover(src_dir: &Path) -> syn::Result<Discovery> {
 
     Ok(discovery)
 }
+    */

@@ -6,15 +6,29 @@ pub use discover::{DiscoveredInstruction, Discovery, discover};
 pub use idl_build::{build_idl, write_idl};
 pub use manifest::read_metadata;
 
-use std::fs;
 use std::path::{Path, PathBuf};
 use syn::Item;
 
+use ignore::WalkBuilder;
+
+pub(crate) fn walk_rs_files(dir: &Path) -> Vec<PathBuf> {
+    WalkBuilder::new(dir)
+        .standard_filters(true)
+        .build()
+        .filter_map(|entry| entry.ok())
+        .filter(|entry| entry.file_type().is_some_and(|ft| ft.is_file()))
+        .map(|entry| entry.into_path())
+        .filter(|path| path.extension().is_some_and(|ext| ext == "rs"))
+        .collect()
+}
+
+/*
 pub(crate) fn walk_rs_files(dir: &Path) -> Vec<PathBuf> {
     let mut files = Vec::new();
     let Ok(entries) = fs::read_dir(dir) else {
         return files;
     };
+
 
     for entry in entries.flatten() {
         let path = entry.path();
@@ -25,7 +39,9 @@ pub(crate) fn walk_rs_files(dir: &Path) -> Vec<PathBuf> {
         }
     }
     files
+
 }
+*/
 
 pub(crate) fn visit_items(items: &[Item], discovery: &mut Discovery, file_path: &Path) {
     for item in items {
@@ -51,7 +67,9 @@ pub(crate) fn visit_items(items: &[Item], discovery: &mut Discovery, file_path: 
             }
             Item::Const(c) => {
                 if find_attr(&c.attrs, "p_constant").is_some() {
-                    discovery.constants.push((c.clone(), file_path.to_path_buf()));
+                    discovery
+                        .constants
+                        .push((c.clone(), file_path.to_path_buf()));
                 }
             }
             Item::Macro(mac) => {
@@ -68,8 +86,7 @@ pub(crate) fn visit_items(items: &[Item], discovery: &mut Discovery, file_path: 
                     .path
                     .segments
                     .last()
-                    .map(|seg| seg.ident == "declare_id")
-                    .unwrap_or(false);
+                    .is_some_and(|seg| seg.ident == "declare_id");
 
                 if is_declare_id {
                     if let Ok(lit) = mac.mac.parse_body::<syn::LitStr>() {

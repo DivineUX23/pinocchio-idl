@@ -38,7 +38,7 @@ fn builds_idl_from_fixture() {
     let token_program = make
         .accounts
         .iter()
-        .find(|a| a.name == "tokenProgram")
+        .find(|a| a.name == "token_program")
         .unwrap();
     assert_eq!(
         token_program.address.as_deref(),
@@ -48,7 +48,7 @@ fn builds_idl_from_fixture() {
     let system_program = make
         .accounts
         .iter()
-        .find(|a| a.name == "systemProgram")
+        .find(|a| a.name == "system_program")
         .unwrap();
     assert_eq!(
         system_program.address.as_deref(),

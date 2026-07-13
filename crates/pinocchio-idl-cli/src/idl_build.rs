@@ -2,7 +2,7 @@ use quote::ToTokens;
 use std::{fs, path::Path};
 use syn::{Fields, ItemConst, ItemEnum, ItemStruct, Lit};
 
-
+use anyhow::Context;
 use pinocchio_idl_core::{
     Idl, IdlAccountDef, IdlConstant, IdlError, IdlField, IdlType, IdlTypeDefinition, Instruction,
     Metadata, account_discriminator, derive_instruction_name, find_accounts_param, rust_to_idl,
@@ -10,12 +10,25 @@ use pinocchio_idl_core::{
 
 use crate::discover::discover;
 
+/*
 fn format_syn_error(err: syn::Error, file: &Path) -> anyhow::Error {
     let mut msgs = Vec::new();
     for e in err.into_iter() {
         let span = e.span().start();
         msgs.push(format!("{} at {}:{}:{}", e, file.display(), span.line, span.column));
     }
+    anyhow::anyhow!("{}", msgs.join("\n"))
+}
+*/
+
+fn format_syn_error(err: syn::Error, file: &Path) -> anyhow::Error {
+    let msgs: Vec<String> = err
+        .into_iter()
+        .map(|e| {
+            let span = e.span().start();
+            format!("{} at {}:{}:{}", e, file.display(), span.line, span.column)
+        })
+        .collect();
     anyhow::anyhow!("{}", msgs.join("\n"))
 }
 
@@ -65,8 +78,61 @@ fn state_to_idl(item: &ItemStruct) -> syn::Result<(IdlAccountDef, IdlTypeDefinit
 fn errors_from_enum(item: &ItemEnum) -> syn::Result<Vec<IdlError>> {
     let mut errors = Vec::new();
 
-    for (default_code, variant) in item.variants.iter().enumerate() {
+    for (index, variant) in item.variants.iter().enumerate() {
         let name = variant.ident.to_string();
+
+        let parts: Vec<String> = variant
+            .attrs
+            .iter()
+            .filter_map(|attr| {
+                if !attr.path().is_ident("doc") {
+                    return None;
+                }
+                let nv = attr.meta.require_name_value().ok()?;
+
+                if let syn::Expr::Lit(syn::ExprLit {
+                    lit: Lit::Str(s), ..
+                }) = &nv.value
+                {
+                    let trimmed = s.value().trim().to_string();
+                    if !trimmed.is_empty() {
+                        return Some(trimmed);
+                    }
+                }
+                None
+            })
+            .collect();
+
+        let msg = if parts.is_empty() {
+            name.clone()
+        } else {
+            parts.join(" ")
+        };
+
+        let code: u32 = variant
+            .attrs
+            .iter()
+            .find_map(|attr| {
+                if !attr.path().is_ident("p_code") {
+                    return None;
+                }
+                let nv = attr.meta.require_name_value().ok()?;
+                if let syn::Expr::Lit(syn::ExprLit {
+                    lit: Lit::Int(n), ..
+                }) = &nv.value
+                {
+                    n.base10_parse::<u32>().ok()
+                } else {
+                    None
+                }
+            })
+            .unwrap_or_else(|| 6000 + index as u32);
+
+        errors.push(IdlError { code, name, msg });
+    }
+    Ok(errors)
+}
+/*
 
         let msg: Option<String> = {
             let parts: Vec<String> = variant
@@ -76,6 +142,7 @@ fn errors_from_enum(item: &ItemEnum) -> syn::Result<Vec<IdlError>> {
                     if !attr.path().is_ident("doc") {
                         return None;
                     }
+
                     if let syn::Meta::NameValue(nv) = &attr.meta {
                         if let syn::Expr::Lit(syn::ExprLit {
                             lit: Lit::Str(s), ..
@@ -134,6 +201,7 @@ fn errors_from_enum(item: &ItemEnum) -> syn::Result<Vec<IdlError>> {
 
     Ok(errors)
 }
+*/
 
 fn constant_from_item(item: &ItemConst) -> syn::Result<IdlConstant> {
     let name = item.ident.to_string();
@@ -152,7 +220,10 @@ pub fn build_idl(src_dir: &Path, metadata: Metadata) -> anyhow::Result<Idl> {
     let discovery = discover(src_dir).map_err(|e| anyhow::anyhow!("Discovery error: {}", e))?;
 
     if discovery.instructions.is_empty() && discovery.states.is_empty() {
-        anyhow::bail!("No #[p_instruction] or #[p_state] annotations found in {}", src_dir.display());
+        anyhow::bail!(
+            "No #[p_instruction] or #[p_state] annotations found in {}",
+            src_dir.display()
+        );
     }
 
     let instructions = discovery
@@ -168,7 +239,8 @@ pub fn build_idl(src_dir: &Path, metadata: Metadata) -> anyhow::Result<Idl> {
             instruction.add_accounts(&discovered.func.block.stmts, &accounts_ident.to_string());
 
             let name = derive_instruction_name(&discovered.func.sig.ident);
-            instruction.into_idl(name, index as u8)
+            instruction
+                .into_idl(name, index as u8)
                 .map_err(|e| format_syn_error(e, &discovered.file))
         })
         .collect::<anyhow::Result<Vec<_>>>()?;
@@ -207,7 +279,11 @@ pub fn build_idl(src_dir: &Path, metadata: Metadata) -> anyhow::Result<Idl> {
     })
 }
 
-pub fn write_idl(idl: &Idl, out_path: &Path) -> std::io::Result<()> {
-    let json = serde_json::to_string_pretty(idl).expect("Idl serialization is infallible");
-    fs::write(out_path, json)
+pub fn write_idl(idl: &Idl, out_path: &Path) -> anyhow::Result<()> {
+    let json = serde_json::to_string_pretty(idl).context("Failed to serialize IDL to JSON")?;
+
+    fs::write(out_path, &json)
+        .with_context(|| format!("Failed to write IDL to {}", out_path.display()))?;
+
+    Ok(())
 }
