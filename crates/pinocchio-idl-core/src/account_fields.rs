@@ -38,6 +38,13 @@ impl ToTokens for Ata {
 
 impl Ata {
     pub fn into_idl(&self, account_names: &[String], arg_names: &[String]) -> syn::Result<IdlPda> {
+        if self.0.len() != 2 {
+            return Err(syn::Error::new(
+                proc_macro2::Span::call_site(),
+                "ata = [...] requires exactly two expressions: [owner, mint]",
+            ));
+        }
+
         let seeds = self
             .0
             .iter()
@@ -45,13 +52,18 @@ impl Ata {
             .collect::<syn::Result<Vec<_>>>()?;
 
         // associated Token program address
-        let atoken_bytes: Vec<u8> = bs58_decode("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL")
-            .expect("AToken address is valid Base58");
+        //let atoken_bytes: Vec<u8> = bs58_decode("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL")
+        //.expect("AToken address is valid Base58");
+
+        const ATOKEN_ID: [u8; 32] = [
+            140, 151, 37, 143, 78, 36, 137, 241, 187, 61, 16, 41, 20, 142, 13, 131, 11, 90, 19,
+            153, 218, 255, 16, 132, 4, 142, 123, 216, 219, 233, 248, 89,
+        ];
 
         Ok(IdlPda {
             seeds,
             program: Some(IdlPdaProgram::Const {
-                value: atoken_bytes,
+                value: ATOKEN_ID.to_vec(),
             }),
         })
     }
@@ -88,6 +100,14 @@ impl Parse for Seed {
                         content.parse::<Token![,]>()?;
                     }
                     continue;
+                } else {
+                    return Err(syn::Error::new(
+                        key.span(),
+                        format!(
+                            "Unknown named parameter `{}` in PDA seeds. Only `program = ...` is supported.",
+                            key
+                        ),
+                    ));
                 }
             }
 

@@ -228,8 +228,10 @@ pub fn seed_expr_to_idl(
     })
 }
 
-fn is_pubkey_type(ty: &Type) -> bool {
-    matches!(ty, Type::Path(p) if p.path.is_ident("Pubkey") || p.path.is_ident("Address"))
+pub fn is_pubkey_type(ty: &Type) -> bool {
+    //matches!(ty, Type::Path(p) if p.path.is_ident("Pubkey") || p.path.is_ident("Address"))
+
+    matches!(ty, Type::Path(p) if p.path.segments.last().is_some_and(|s| s.ident == "Pubkey" || s.ident == "Address"))
 }
 
 pub fn seed_class_to_tokens(class: &SeedClass, data_fields: &[Data]) -> syn::Result<TokenStream2> {
@@ -338,8 +340,8 @@ fn is_get_account(mut expr: &Expr, name: &str) -> bool {
         match expr {
             Expr::Try(t) => expr = &t.expr,
             Expr::MethodCall(m) => {
-                let method_name = m.method.to_string();
-                if method_name == "get" || method_name == "get_mut" || method_name == "next" {
+                //let method_name = m.method.to_string();
+                if m.method == "get" || m.method == "get_mut" || m.method == "next" {
                     has_get = true;
                 }
                 expr = &m.receiver;
@@ -350,18 +352,22 @@ fn is_get_account(mut expr: &Expr, name: &str) -> bool {
     }
 }
 
-
-pub fn count_account_binding(stmts: &[Stmt], accounts_param: &str) -> Vec<Ident> {
+pub fn account_binding(stmts: &[Stmt], accounts_param: &str) -> Vec<Ident> {
     let mut binding = Vec::new();
 
     for stmt in stmts {
         if let Stmt::Local(local) = stmt {
-            if let Pat::Slice(slice) = &local.pat {
+            let mut pat = &local.pat;
+            if let Pat::Type(pat_type) = pat {
+                pat = &pat_type.pat;
+            }
+
+            if let Pat::Slice(slice) = pat {
                 if let Some(init) = &local.init {
                     if is_path_ident(&init.expr, accounts_param) {
                         //let binding = slice.elems.iter().filter(|p| !matches!(p, Pat::Rest(_))).collect();
-                        for pat in slice.elems.iter() {
-                            if let Pat::Ident(pat_ident) = pat {
+                        for p in slice.elems.iter() {
+                            if let Pat::Ident(pat_ident) = p {
                                 binding.push(pat_ident.ident.clone());
                             }
                         }
@@ -370,8 +376,10 @@ pub fn count_account_binding(stmts: &[Stmt], accounts_param: &str) -> Vec<Ident>
             }
 
             if let Some(init) = &local.init {
-                if is_indexed_account(&init.expr, accounts_param) || is_get_account(&init.expr, accounts_param) {
-                    if let Pat::Ident(pat_ident) = &local.pat {
+                if is_indexed_account(&init.expr, accounts_param)
+                    || is_get_account(&init.expr, accounts_param)
+                {
+                    if let Pat::Ident(pat_ident) = pat {
                         binding.push(pat_ident.ident.clone());
                     }
 
@@ -383,6 +391,32 @@ pub fn count_account_binding(stmts: &[Stmt], accounts_param: &str) -> Vec<Ident>
         }
     }
     binding
+}
+
+pub fn count_account_binding(stmts: &[Stmt], accounts_param: &str) -> usize {
+    let mut index = 0;
+
+    for (i, stmt) in stmts.iter().enumerate() {
+        if let Stmt::Local(local) = stmt {
+            if let Some(init) = &local.init {
+                if let Pat::Slice(_slice) = &local.pat {
+                    if is_path_ident(&init.expr, accounts_param) {
+                        //return slice.elems.iter().filter(|p| !matches!(p, Pat::Rest(_))).count();
+                        return i + 1;
+                    }
+                }
+
+                if is_indexed_account(&init.expr, accounts_param)
+                    || is_get_account(&init.expr, accounts_param)
+                {
+                    index = i + 1;
+                }
+            }
+        } else {
+            break;
+        }
+    }
+    index
 }
 
 pub fn bs58_decode(s: &str) -> Result<Vec<u8>, String> {

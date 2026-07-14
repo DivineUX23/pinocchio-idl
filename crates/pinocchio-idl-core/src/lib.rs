@@ -27,8 +27,42 @@ impl Parse for Instruction {
         while !input.is_empty() {
             let ident: Ident = input.parse()?;
 
-            match ident.to_string().as_str() {
-                "id" => {
+            if ident == "id" {
+                input.parse::<Token![=]>()?;
+                let lit: LitInt = input.parse()?;
+                id = Some(lit.base10_parse()?);
+            } else if ident == "accounts" {
+                input.parse::<Token![=]>()?;
+                let content;
+                bracketed!(content in input);
+
+                let parsed = content.parse_terminated(Account::parse, Token![,])?;
+
+                accounts = parsed.into_iter().collect();
+            } else if ident == "data" {
+                input.parse::<Token![=]>()?;
+                let content;
+                bracketed!(content in input);
+
+                let parsed = content.parse_terminated(Data::parse, Token![,])?;
+
+                let raw_data = parsed.into_iter().collect();
+                data = Some(raw_data)
+            } else {
+                return Err(syn::Error::new(
+                    ident.span(),
+                    format!("unknown key `{}` in #[p_instruction(...)]", ident),
+                ));
+            }
+
+            if input.peek(Token![,]) {
+                input.parse::<Token![,]>()?;
+            }
+        }
+
+        /*
+        match ident.to_string().as_str() {
+            "id" => {
                     input.parse::<Token![=]>()?;
                     let lit: LitInt = input.parse()?;
                     id = Some(lit.base10_parse()?);
@@ -67,6 +101,7 @@ impl Parse for Instruction {
                 input.parse::<Token![,]>()?;
             }
         }
+        */
 
         Ok(Instruction { id, accounts, data })
     }
@@ -74,7 +109,7 @@ impl Parse for Instruction {
 
 impl Instruction {
     pub fn add_accounts(&mut self, stmts: &[Stmt], accounts_param: &str) {
-        let binded_accounts = count_account_binding(stmts, accounts_param);
+        let binded_accounts = account_binding(stmts, accounts_param);
 
         let new_binds: Vec<Ident> = binded_accounts
             .into_iter()
@@ -131,6 +166,7 @@ pub struct Account {
     pub is_mut: bool,
     pub pda: Option<Seed>,
     pub ata: Option<Ata>,
+    pub init: Option<Ata>,
     pub struct_state: Option<Ident>,
     pub address: Option<syn::LitStr>,
     pub relations: Vec<Ident>,
@@ -144,6 +180,7 @@ impl Parse for Account {
         let mut is_mut = false;
         let mut pda = None;
         let mut ata = None;
+        let mut init = None;
         let mut struct_state = None;
         let mut address = None;
         let mut relations = Vec::new();
@@ -163,6 +200,46 @@ impl Parse for Account {
                 }
 
                 let ident: Ident = content.parse()?;
+
+                if ident == "signer" {
+                    is_signer = true;
+                } else if ident == "pda" {
+                    content.parse::<Token![=]>()?;
+                    let seeds: Seed = content.parse()?;
+
+                    pda = Some(seeds);
+                } else if ident == "ata" {
+                    content.parse::<Token![=]>()?;
+                    let atas: Ata = content.parse()?;
+
+                    ata = Some(atas);
+                } else if ident == "init" {
+                    content.parse::<Token![=]>()?;
+                    let inits: Ata = content.parse()?;
+
+                    init = Some(inits);
+                } else if ident == "state" {
+                    content.parse::<Token![=]>()?;
+                    struct_state = Some(content.parse::<Ident>()?);
+                } else if ident == "address" {
+                    content.parse::<Token![=]>()?;
+                    address = Some(content.parse::<syn::LitStr>()?);
+                } else if ident == "relations" {
+                    content.parse::<Token![=]>()?;
+                    let inner;
+
+                    syn::bracketed!(inner in content);
+
+                    let idents = inner.parse_terminated(Ident::parse, Token![,])?;
+                    relations = idents.into_iter().collect();
+                } else {
+                    return Err(syn::Error::new(
+                        ident.span(),
+                        format!("unknown account constraint `{}`", ident),
+                    ));
+                }
+
+                /*
                 match ident.to_string().as_str() {
                     "signer" => is_signer = true,
                     "pda" => {
@@ -200,11 +277,20 @@ impl Parse for Account {
                         ));
                     }
                 }
+                */
 
                 if content.peek(Token![,]) {
                     content.parse::<Token![,]>()?;
                 }
             }
+            /*
+            if pda.is_some() && ata.is_some() {
+                return Err(syn::Error::new(
+                    name.span(),
+                    "Account cannot be both a PDA and an ATA simultaneously.",
+                ));
+            }
+            */
         }
 
         Ok(Account {
@@ -213,6 +299,7 @@ impl Parse for Account {
             is_mut,
             pda,
             ata,
+            init,
             struct_state,
             address,
             relations,
@@ -228,6 +315,7 @@ impl Account {
             is_mut: false,
             pda: None,
             ata: None,
+            init: None,
             struct_state: None,
             address: None,
             relations: Vec::new(),
@@ -250,6 +338,12 @@ impl Account {
         } else if self.ata.is_some() {
             pda_data = self
                 .ata
+                .as_ref()
+                .map(|ata| ata.into_idl(account_names, arg_names))
+                .transpose()?;
+        } else if self.init.is_some() {
+            pda_data = self
+                .init
                 .as_ref()
                 .map(|ata| ata.into_idl(account_names, arg_names))
                 .transpose()?;

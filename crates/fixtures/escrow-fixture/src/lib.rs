@@ -43,10 +43,10 @@ pub struct Escrow {
     id = 0,
     accounts = [
         maker(signer, mut),
-        vault(mut, ata=[escrow, mint_a]),
+        vault(mut, init=[escrow, mint_a]),
         mint_a,
         mint_b,
-        escrow(mut, pda=["escrow", mint_b, seed], state=Escrow),
+        escrow(mut, pda=["escrow", mint_b, seed, program="TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"], state=Escrow),
         token_program(address = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"),
         system_program
     ],

@@ -70,6 +70,7 @@ impl serde::Serialize for FieldType {
         match self {
             FieldType::Simple(name) => s.serialize_str(name),
             FieldType::Array(inner, len) => {
+                /*
                 use serde::ser::SerializeSeq;
                 struct ArrayTuple<'a>(&'a FieldType, usize);
 
@@ -81,9 +82,12 @@ impl serde::Serialize for FieldType {
                         seq.end()
                     }
                 }
+                */
 
                 let mut map = s.serialize_map(Some(1))?;
-                map.serialize_entry("array", &ArrayTuple(inner, *len))?;
+                //map.serialize_entry("array", &ArrayTuple(inner, *len))?;
+                map.serialize_entry("array", &(inner, *len))?;
+
                 map.end()
             }
 
@@ -103,8 +107,13 @@ impl serde::Serialize for FieldType {
 
             // { "defined": "MyStruct" }
             FieldType::Defined(name) => {
+                #[derive(Serialize)]
+                struct DefinedType<'a> {
+                    name: &'a str,
+                }
+
                 let mut map = s.serialize_map(Some(1))?;
-                map.serialize_entry("defined", name)?;
+                map.serialize_entry("defined", &DefinedType { name })?;
                 map.end()
             }
         }

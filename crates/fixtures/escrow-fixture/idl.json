@@ -101,7 +101,44 @@
                 "kind": "arg",
                 "path": "seed"
               }
-            ]
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                6,
+                221,
+                246,
+                225,
+                215,
+                101,
+                161,
+                147,
+                217,
+                203,
+                225,
+                70,
+                206,
+                235,
+                121,
+                172,
+                28,
+                180,
+                133,
+                237,
+                95,
+                91,
+                55,
+                145,
+                58,
+                140,
+                245,
+                133,
+                126,
+                255,
+                0,
+                169
+              ]
+            }
           },
           "state": "Escrow"
         },
@@ -147,12 +184,12 @@
   ],
   "errors": [
     {
-      "code": 0,
+      "code": 6000,
       "name": "AlreadyTaken",
       "msg": "item already taken"
     },
     {
-      "code": 1,
+      "code": 6001,
       "name": "ZeroAmount",
       "msg": "item is zero"
     },
@@ -162,7 +199,7 @@
       "msg": "item is invalid"
     },
     {
-      "code": 3,
+      "code": 6003,
       "name": "Expired",
       "msg": "item has expired"
     }
