@@ -235,7 +235,10 @@ impl Parse for Account {
                 } else {
                     return Err(syn::Error::new(
                         ident.span(),
-                        format!("unknown account constraint `{}`", ident),
+                        format!(
+                            "unknown account constraint `{}`, accepted constraint are - `signer`, `mut`, `pda`, `ata`, `init`, `state`, `address`, `relations`",
+                            ident
+                        ),
                     ));
                 }
 
