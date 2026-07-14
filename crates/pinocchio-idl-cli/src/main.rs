@@ -97,7 +97,8 @@ fn run(cli: Cli) -> Result<()> {
                 }
             });
 
-            let idl = build_idl(&src_dir, metadata).context("IDL generation process failed")?;
+            let idl = build_idl(&src_dir, metadata)
+                .context("IDL generation process failed - check #[p_instruction(...)]")?;
 
             write_idl(&idl, &out)
                 .with_context(|| format!("Failed to write IDL to {}", out.display()))?;
