@@ -348,6 +348,7 @@ pub struct Escrow {
         mint_a,
         mint_b,
         escrow(mut, pda = ["escrow", mint_b, seed, bump, program = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"], state = Escrow),
+        vault(mut, init = [maker, mint_a]),
         token_program(address = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"),
         system_program
     ],
@@ -364,44 +365,7 @@ pub fn process_make_instruction(accounts: &mut [AccountView], data: &[u8]) -> Pr
         return Err(ProgramError::NotEnoughAccountKeys);
     };
 
-    let bump_bytes = [bump];
-    let signer_seeds = [
-        Seed::from(b"escrow"),
-        Seed::from(maker.address().as_array()),
-        Seed::from(bump_bytes.as_ref()),
-    ];
-    let signer = Signer::from(&signer_seeds);
-
-    CreateAccount {
-        from: maker,
-        to: escrow,
-        lamports: Rent::get()?.try_minimum_balance(Escrow::SPACE)?,
-        space: Escrow::SPACE as u64,
-        owner: &crate::ID,
-    }
-    .invoke_signed(&[signer])?;
-
-    let escrow_data = unsafe {
-        &mut *(escrow.borrow_unchecked_mut().as_mut_ptr() as *mut Escrow)
-    };
-
-    let mut maker_bytes = [0u8; 32];
-    maker_bytes.copy_from_slice(maker.address().as_ref());
-
-    escrow_data.maker = maker_bytes;
-    escrow_data.receive = receive;
-    escrow_data.seed = seed;
-    escrow_data.bump = bump;
-
-    pinocchio_associated_token_account::instructions::Create {
-        funding_account: maker,
-        account: vault,
-        wallet: escrow,
-        mint: mint_a,
-        token_program,
-        system_program,
-    }
-    .invoke()?;
+    // ...
 
     Ok(())
 }
@@ -601,8 +565,9 @@ All account extraction statements must therefore appear contiguously at the top 
 ```rust
 // Incorrect — a msg! call between account extractions shifts the injection point
 pub fn process(accounts: &mut [AccountView], data: &[u8]) -> ProgramResult {
-    let [maker, vault] = accounts else { return Err(...); };
+    let maker = accounts[0]
     msg!("processing");   // breaks the contiguous extraction block
+    let vault = account[1];
     // validation guards injected here, before remaining accounts are in scope
     Ok(())
 }
