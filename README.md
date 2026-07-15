@@ -12,7 +12,6 @@ The macros serve a dual purpose: they emit IDL metadata and inject security vali
 
 - [Features](#features)
 - [Workspace Crates](#workspace-crates)
-- [Architecture](#architecture)
 - [Installation](#installation)
 - [Usage](#usage)
   - [1. Adding the Macro Dependency](#1-adding-the-macro-dependency)
@@ -61,12 +60,6 @@ pinocchio-idl/
 │       └── escrow-fixture/      # Reference Pinocchio program
 └── Cargo.toml                   # Workspace root
 ```
-
----
-
-## Architecture
-
-![Architecture diagram](image.png)
 
 ---
 
