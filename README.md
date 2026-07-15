@@ -1,71 +1,88 @@
 # pinocchio-idl
 
-**IDL generation tooling for [Pinocchio](https://github.com/febo/pinocchio) Solana programs.**
+IDL generation tooling for [Pinocchio](https://github.com/febo/pinocchio) Solana programs.
 
-`pinocchio-idl` brings IDL generation to the Pinocchio ecosystem — **no Anchor, no framework wrappers, zero runtime overhead.** Annotate your Pinocchio instruction handlers and account state structs with two proc-macro attributes, run one CLI command, and get a fully-structured `idl.json` that is compatible with both the [Anchor IDL spec](https://www.anchor-lang.com/) and [Codama](https://github.com/codama-idl/codama).
+`pinocchio-idl` provides IDL generation for the Pinocchio ecosystem without requiring Anchor, framework wrappers, or any additional runtime dependencies. Two proc-macro attributes applied to instruction handlers and account state structs, combined with a single CLI invocation, produce a fully-structured `idl.json` compatible with both the [Anchor IDL specification](https://www.anchor-lang.com/) and [Codama](https://github.com/codama-idl/codama).
 
-The macros do double duty: they **generate IDL metadata** _and_ **auto-inject security validation** (account-count bounds checks, signer/writable guards) directly into your instruction handlers **at compile time** — so you get correctness enforcement with no runtime cost and no framework in your dependency tree.
+The macros serve a dual purpose: they emit IDL metadata and inject security validation — account-count bounds checks, signer and writable guards, PDA verification, and ATA state checks — directly into instruction handlers at compile time. The result is correctness enforcement with no runtime overhead and no framework in the dependency graph.
 
+---
+
+## Table of Contents
+
+- [Features](#features)
+- [Workspace Crates](#workspace-crates)
+- [Architecture](#architecture)
+- [Installation](#installation)
+- [Usage](#usage)
+  - [1. Adding the Macro Dependency](#1-adding-the-macro-dependency)
+  - [2. Annotating Your Program](#2-annotating-your-program)
+  - [3. Generating the IDL](#3-generating-the-idl)
+- [Example: Escrow Program](#example-escrow-program)
+- [How It Works](#how-it-works)
+- [IDL Output Format](#idl-output-format)
+- [Behavioral Notes and Known Constraints](#behavioral-notes-and-known-constraints)
+- [Building from Source](#building-from-source)
+- [Limitations and Roadmap](#limitations-and-roadmap)
 
 ---
 
 ## Features
 
-- **Compile-time security injection** — `#[p_instruction]` rewrites your handler at compile time to inject account-count bounds checking, per-account `signer`/`writable` guards, **PDA on-chain verification**, and **ATA (Associated Token Account) state verification**. No runtime framework, no trait vtables, just the checks you declared.
-- **`#[p_instruction(...)]`** — Declare accounts (writable, signer, PDA seeds, ATA, relations, fixed addresses) and instruction data (byte-slice extraction) in a concise attribute DSL.
-- **`#[p_state]`** — Derive a compile-time `SPACE` constant and an Anchor-compatible 8-byte `DISCRIMINATOR` (SHA-256 of `"account:<StructName>"`) for any account state struct. Supported field types include primitives, `Pubkey`, fixed-size arrays, `Vec<T>`, and `Option<T>`.
-- **`#[p_error]`** — Annotate an error enum to have all its variants automatically emitted into the `errors` section of the IDL, with human-readable messages taken from doc comments and optional `#[p_code = N]` overrides.
-- **`#[p_constant]`** — Annotate any `const` item to have its name, type, and value emitted into the `constants` section of the IDL.
-- **Anchor + Codama compatible IDL** — The generated `idl.json` satisfies the Anchor IDL spec and is directly consumable by [Codama](https://github.com/codama-idl/codama) for client generation.
-- **Well-known Program Resolution** — Accounts assigned a known address (like the Token Program or System Program) automatically have their names resolved to the canonical IDL names (`tokenProgram`, `systemProgram`).
-- **Zero runtime overhead** — All macro expansion happens at Rust compile time. The CLI is a pure static-analysis tool that never invokes the compiler.
-- **Zero framework wrappers** — No Anchor, no additional runtime traits or abstractions. Your Pinocchio program stays exactly as lean as you wrote it.
+- **Compile-time validation injection.** `#[p_instruction]` rewrites the annotated handler at compile time, prepending account-count bounds checking, per-account `signer` and `writable` guards, PDA on-chain address verification, and ATA state checks. No runtime framework, no trait vtables — only the guards declared in the attribute.
+- **`#[p_instruction(...)]`.** A declarative attribute DSL for specifying accounts (writable, signer, PDA seeds, ATA, relations, fixed addresses) and instruction data fields (byte-slice extraction).
+- **`#[p_state]`.** Derives a compile-time `SPACE` constant and an Anchor-compatible 8-byte `DISCRIMINATOR` (SHA-256 of `"account:<StructName>"`) for any named-field struct. Supported field types include all primitive integers, `Pubkey`, fixed-size arrays, `Vec<T>`, and `Option<T>`.
+- **`#[p_error]`.** Emits all variants of an annotated error enum into the `errors` section of the IDL, sourcing human-readable messages from doc comments and supporting optional `#[p_code = N]` error code overrides.
+- **`#[p_constant]`.** Emits any annotated `const` item — name, type, and value — into the `constants` section of the IDL.
+- **Anchor and Codama compatible output.** The generated `idl.json` satisfies the Anchor IDL specification and is directly consumable by [Codama](https://github.com/codama-idl/codama) for client-code generation.
+- **Well-known program resolution.** Accounts using reserved names (`system_program`, `token_program`, etc.) are automatically mapped to their canonical on-chain addresses in the generated IDL.
+- **Zero runtime overhead.** All macro expansion occurs at Rust compile time. The CLI is a pure static-analysis tool and does not invoke the Rust compiler.
+- **No framework dependencies.** Programs using `pinocchio-idl` remain as lean as a hand-written Pinocchio program.
 
 ---
 
 ## Workspace Crates
 
-This repository contains three main crates, which all share this single README:
+This repository is a Cargo workspace. All crates share this README.
 
-- **[`pinocchio-idl-cli`](crates/pinocchio-idl-cli/)**: The command-line interface (`pinocchio-idl build`). This is what you install on your machine to generate IDLs.
-- **[`pinocchio-idl-macros`](crates/pinocchio-idl-macros/)**: The proc-macro crate providing `#[p_instruction]`, `#[p_state]`, etc. You add this directly to your Pinocchio program's dependencies.
-- **[`pinocchio-idl-core`](crates/pinocchio-idl-core/)**: Shared parsing types and IDL serialization structs. **Note:** This is an internal transitive dependency used by the CLI and macros. You do **not** need to depend on this crate directly.
+| Crate | Role |
+|---|---|
+| [`pinocchio-idl-cli`](crates/pinocchio-idl-cli/) | CLI binary (`pinocchio-idl build`). Install this on the development machine to generate IDLs. |
+| [`pinocchio-idl-macros`](crates/pinocchio-idl-macros/) | Proc-macro crate providing `#[p_instruction]`, `#[p_state]`, `#[p_error]`, and `#[p_constant]`. Add this as a direct dependency of the Pinocchio program. |
+| [`pinocchio-idl-core`](crates/pinocchio-idl-core/) | Shared parsing types and IDL serialization structures. This is an internal transitive dependency of the CLI and macros crates; programs do not need to depend on it directly. |
 
 ```text
 pinocchio-idl/
 ├── crates/
 │   ├── pinocchio-idl-core/      # Shared parsing types & IDL structs (internal)
-│   ├── pinocchio-idl-macros/    # Proc-macro crate (#[p_instruction], #[p_state])
-│   ├── pinocchio-idl-cli/       # CLI binary (pinocchio-idl build)
+│   ├── pinocchio-idl-macros/    # Proc-macro crate
+│   ├── pinocchio-idl-cli/       # CLI binary
 │   └── fixtures/
-│       └── escrow-fixture/      # Example Pinocchio program using the macros
+│       └── escrow-fixture/      # Reference Pinocchio program
 └── Cargo.toml                   # Workspace root
 ```
 
-
 ---
 
-## Architecture Diagram
+## Architecture
 
-
-![alt text](image.png)
-
+![Architecture diagram](image.png)
 
 ---
 
 ## Installation
 
-### CLI — `pinocchio-idl build`
+### CLI
 
-Install the binary directly from GitHub (no crates.io required):
+The `pinocchio-idl` binary can be installed directly from this repository. A crates.io release is not yet available.
 
 ```bash
 cargo install --git https://github.com/DivineUX23/pinocchio-idl.git pinocchio-idl-cli
 ```
 
-Cargo will clone the repo, compile the `pinocchio-idl-cli` crate, and place the `pinocchio-idl` binary on your `PATH`.
+Cargo will clone the repository, compile `pinocchio-idl-cli`, and place the resulting `pinocchio-idl` binary on the `PATH`.
 
-Verify the install:
+Confirm the installation:
 
 ```bash
 pinocchio-idl --version
@@ -75,9 +92,9 @@ pinocchio-idl --version
 
 ## Usage
 
-### 1. Add the macro dependency to your Pinocchio program
+### 1. Adding the Macro Dependency
 
-In your program's `Cargo.toml`, point directly at this GitHub repository:
+Add `pinocchio-idl-macros` to the program's `Cargo.toml`:
 
 ```toml
 [dependencies]
@@ -94,11 +111,11 @@ pinocchio-idl-macros = { git = "https://github.com/DivineUX23/pinocchio-idl.git"
 
 ---
 
-### 2. Annotate your program
+### 2. Annotating Your Program
 
-#### `#[p_state]` — Account state struct
+#### `#[p_state]` — Account State Struct
 
-Decorate any named-field struct to get a compile-time `SPACE` constant and an Anchor-compatible `DISCRIMINATOR`:
+Apply `#[p_state]` to any named-field struct to derive a compile-time `SPACE` constant and an Anchor-compatible `DISCRIMINATOR`:
 
 ```rust
 use pinocchio_idl_macros::p_state;
@@ -114,18 +131,18 @@ pub struct Escrow {
 }
 ```
 
-This expands to:
+The macro expands to:
 
 ```rust
 impl Escrow {
-    pub const SPACE: usize = 8 + 32 + 32 + 32 + 8 + 1; // raw field bytes
+    pub const SPACE: usize = 8 + 32 + 32 + 32 + 8 + 1;
     pub const DISCRIMINATOR: [u8; 8] = [/* sha256("account:Escrow")[..8] */];
 }
 ```
 
-Supported field types:
+**Supported field types:**
 
-| Type | IDL type | `SPACE` bytes |
+| Type | IDL type | `SPACE` (bytes) |
 |---|---|---|
 | `u8`, `i8`, `bool` | `u8` / `i8` / `bool` | 1 |
 | `u16`, `i16` | `u16` / `i16` | 2 |
@@ -134,16 +151,16 @@ Supported field types:
 | `u128`, `i128` | `u128` / `i128` | 16 |
 | `Pubkey` / `Address` | `pubkey` | 32 |
 | `[u8; 32]` | `pubkey` | 32 |
-| `[T; N]` | `[T; N]` | elem × N |
+| `[T; N]` | `[T; N]` | `sizeof(T)` × N |
 | `Vec<T>` | `vec<T>` | 4 (length prefix only) |
-| `Option<T>` | `{"option": T}` | 1 + size(T) |
-| Custom enum / struct | name as-is | error — use a primitive wrapper |
+| `Option<T>` | `{"option": T}` | 1 + `sizeof(T)` |
+| Custom enum or struct | name as-is | unsupported — use a primitive or `[u8; N]` |
 
 ---
 
-#### `#[p_instruction(...)]` — Instruction handler
+#### `#[p_instruction(...)]` — Instruction Handler
 
-Annotate your handler function to declare its accounts and data layout:
+Apply `#[p_instruction]` to a handler function to declare its account list and data layout:
 
 ```rust
 use pinocchio_idl_macros::p_instruction;
@@ -152,8 +169,9 @@ use pinocchio_idl_macros::p_instruction;
     id = 0,
     accounts = [
         maker(signer, mut),
-        escrow(mut, pda = ["escrow", maker, seed], state = Escrow),
-        vault(mut, relations = [escrow, mint_a]),
+        escrow(mut, pda = ["escrow", maker, seed, bump], state = Escrow),
+        vault_a(mut, ata = [escrow, mint_a]),
+        vault_b(mut, init = [escrow, mint_b]),
         token_program(address = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
     ],
     data = [
@@ -162,143 +180,151 @@ use pinocchio_idl_macros::p_instruction;
         bump:    u8  = data[16]
     ]
 )]
-pub fn process_make_instruction(accounts: &[AccountView], data: &[u8]) -> ProgramResult {
-    let [maker, mint_a, mint_b, escrow, vault, token_program] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys)
+pub fn process_make_instruction(accounts: &mut [AccountView], data: &[u8]) -> ProgramResult {
+    let [maker, mint_a, mint_b, escrow, vault_a, vault_b, token_program] = accounts else {
+        return Err(ProgramError::NotEnoughAccountKeys);
     };
-    // ... your logic
+    // instruction logic follows
     Ok(())
 }
 ```
 
 **Account constraint reference:**
 
-| Constraint | Syntax | Effect |
+| Constraint | Syntax | Behaviour |
 |---|---|---|
 | Writable | `mut` | Validates `account.is_writable()` at runtime |
 | Signer | `signer` | Validates `account.is_signer()` at runtime |
-| PDA seeds | `pda = ["literal", acc_name, arg_name, program = "Base58..."]` | Recorded in IDL **and** verified on-chain. `program` override is optional (defaults to `crate::ID`). |
-| ATA checks | `ata = [owner_acc, mint_acc]` | Recorded in IDL **and** on-chain owner/mint validation via `pinocchio_token::state::Account` |
-| Linked state | `state = StructName` | Associates an account with its `#[p_state]` type |
-| Fixed address | `address = "Base58..."` | Records a known program/sysvar address in the IDL. Auto-resolves known names like `tokenProgram`. |
-| Relations | `relations = [other, another]` | Records account relationships in the IDL |
+| PDA seeds | `pda = ["literal", acc, arg, program = "Base58..."]` | Recorded in the IDL and verified on-chain. The `program` key is optional; it defaults to `crate::ID`. |
+| ATA | `ata = [owner, mint]` | Recorded in the IDL and validated on-chain via `pinocchio_token::state::Account`. Requires exactly two expressions. |
+| Linked state | `state = StructName` | Associates the account with a `#[p_state]` type in the IDL |
+| Fixed address | `address = "Base58..."` | Records a known program or sysvar address in the IDL |
+| Relations | `relations = [a, b]` | Records account relationships in the IDL |
 
 **Data field syntax:** `field_name: Type = data[start..end]` or `data[index]`
 
-#### What the macro injects at compile time
+#### Compile-Time Injection
 
-When the Rust compiler expands `#[p_instruction]`, it **rewrites your function body** to prepend the following guards — no boilerplate you have to write:
+When the Rust compiler processes `#[p_instruction]`, the macro rewrites the function body to prepend two categories of generated guards:
 
 ```rust
-// 1. Bounds check — inserted at the very top of the function
-if accounts.len() < 4 {   // number of declared accounts
+// 1. Account count bounds check — inserted at the top of the function
+if accounts.len() < 5 {
     return Err(ProgramError::NotEnoughAccountKeys);
 }
 
-// 2. Per-account constraint guards — inserted after your account bindings
+// 2. Per-account constraint guards — inserted after account bindings
 if !maker.is_signer() {
     return Err(ProgramError::MissingRequiredSignature);
 }
 if !escrow.is_writable() {
     return Err(ProgramError::MissingRequiredSignature);
 }
-// ...and so on for every declared constraint
+// ...continued for all declared constraints
 ```
 
-All of this happens at **compile time** with zero runtime overhead and without any framework in your dependency tree — you just annotate your function and the macro handles the rest.
+These guards are generated entirely at compile time. No runtime framework, dynamic dispatch, or additional traits are introduced.
 
 ---
 
-#### `#[p_error]` — Program error enum
+#### `#[p_error]` — Program Error Enum
 
-Annotate an error enum so all its variants are emitted into the `errors` section of the IDL. Use standard Rust doc comments (`///`) as the human-readable message, and the optional `#[p_code = N]` attribute to override the default 0-based error code:
+Apply `#[p_error]` to an error enum to emit all variants into the `errors` section of the IDL. Doc comments (`///`) supply the human-readable message; `#[p_code = N]` overrides the default sequential error code for a given variant.
 
 ```rust
 use pinocchio_idl_macros::p_error;
 
 #[p_error]
 pub enum EscrowError {
-    /// The escrow has already been taken
+    /// The escrow has already been taken.
     AlreadyTaken,          // code 0
-    /// The offer amount is zero
+    /// The offer amount is zero.
     ZeroAmount,            // code 1
     #[p_code = 100]
-    /// Invalid mint provided
+    /// Invalid mint provided.
     InvalidMint,           // code 100
-    /// The escrow has expired
+    /// The escrow has expired.
     Expired,               // code 3
 }
 ```
 
-- `#[p_code = N]` overrides the sequential index for a single variant; other variants continue from their position index.
-- `#[p_code]` is stripped at compile time by the macro, so rustc never sees an unknown attribute.
-- Doc comments become the `msg` field in the IDL; the variant name is used as a fallback if no doc comment is present.
+- `#[p_code = N]` affects only the variant it decorates; subsequent variants continue from their ordinal position.
+- The `#[p_code]` attribute is stripped at compile time and is never seen by rustc.
+- If a variant has no doc comment, the variant name is used as the IDL message.
 
 ---
 
-#### `#[p_constant]` — On-chain constant
+#### `#[p_constant]` — On-Chain Constant
 
-Annotate any `const` item to have it appear in the `constants` section of the IDL:
+Apply `#[p_constant]` to any `const` item to include it in the `constants` section of the IDL:
 
 ```rust
 use pinocchio_idl_macros::p_constant;
 
 #[p_constant]
-pub const MAX_ESCROW_DURATION: u64 = 60 * 60 * 24 * 30;  // 30 days in seconds
+pub const MAX_ESCROW_DURATION: u64 = 60 * 60 * 24 * 30;
 
 #[p_constant]
 pub const ESCROW_VERSION: u8 = 1;
 ```
 
-The CLI reads the constant's name, type, and value expression from the source AST and serialises them directly into the IDL.
+The CLI reads the constant's name, type, and value expression directly from the source AST and serialises them into the IDL.
 
 ---
 
-### 3. Generate the IDL
+### 3. Generating the IDL
 
-From inside your Pinocchio program directory (where your `Cargo.toml` lives):
-
-```bash
-pinocchio-idl build
-```
-
-This produces `idl.json` in the current directory. Options:
+Run the following command from the directory containing the program's `Cargo.toml`:
 
 ```bash
-pinocchio-idl build \
-  --manifest-path path/to/Cargo.toml \   # default: ./Cargo.toml
-  --out target/idl/my_program.idl.json   # default: ./idl.json
+pinocchio-idl generate
 ```
 
-The generated file is a valid **Anchor-compatible IDL** and is also directly consumable by **[Codama](https://github.com/codama-idl/codama)** for automatic client-code generation in TypeScript, Rust, and other languages.
+This produces `idl.json` in the current directory. Available options:
+
+```bash
+pinocchio-idl generate \
+  --manifest-path path/to/Cargo.toml \     # default: ./Cargo.toml
+  --out target/idl/my_program.idl.json     # default: ./idl.json
+```
+
+The output is a valid Anchor-compatible IDL and is directly consumable by [Codama](https://github.com/codama-idl/codama) for automated client-code generation in TypeScript, Rust, and other target languages.
 
 ---
 
 ## Example: Escrow Program
 
-A complete working example lives in [`crates/fixtures/escrow-fixture/src/lib.rs`](crates/fixtures/escrow-fixture/src/lib.rs):
+A self-contained reference implementation is available in [`crates/fixtures/escrow-fixture/src/lib.rs`](crates/fixtures/escrow-fixture/src/lib.rs). Additional programs annotated with `pinocchio-idl` are maintained in the [pinocchio-idl-examples](https://github.com/DivineUX23/pinocchio-idl-examples) repository.
 
 ```rust
 use pinocchio::{
-    AccountView, ProgramResult,
+    cpi::{Seed, Signer},
     error::ProgramError,
+    sysvars::{rent::Rent, Sysvar},
+    AccountView, ProgramResult,
 };
 use pinocchio_idl_macros::{p_constant, p_error, p_instruction, p_state};
+use pinocchio_system::instructions::CreateAccount;
 
 pinocchio::address::declare_id!("11111111111111111111111111111111111111111");
+
+#[p_constant]
+pub const MAX_ESCROW_DURATION: u64 = 60 * 60 * 24 * 30;
 
 #[p_constant]
 pub const ESCROW_VERSION: u8 = 1;
 
 #[p_error]
 pub enum EscrowError {
-    /// The escrow has already been taken
+    /// The escrow has already been taken.
     AlreadyTaken,
-    /// The offer amount is zero
+    /// The offer amount is zero.
     ZeroAmount,
     #[p_code = 100]
-    /// Invalid mint provided
+    /// Invalid mint provided.
     InvalidMint,
+    /// The escrow has expired.
+    Expired,
 }
 
 #[p_state]
@@ -309,16 +335,21 @@ pub struct Escrow {
     pub mint_b:    [u8; 32],
     pub receive:   u64,
     pub bump:      u8,
-    pub authority: Option<[u8; 32]>,  // Option<T> is now supported
+    pub authority: Option<[u8; 32]>,
 }
 
+// NOTE: The bump is passed as an explicit seed in pda = [...].
+// See "Behavioral Notes" section 1 for the rationale.
 #[p_instruction(
     id = 0,
     accounts = [
         maker(signer, mut),
-        escrow(mut, pda = ["escrow", maker, seed], state = Escrow),
-        vault(mut, relations = [escrow, mint_a]),
-        token_program(address = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
+        vault(mut, init = [escrow, mint_a]),
+        mint_a,
+        mint_b,
+        escrow(mut, pda = ["escrow", mint_b, seed, bump, program = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"], state = Escrow),
+        token_program(address = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"),
+        system_program
     ],
     data = [
         seed:    u64 = data[0..8],
@@ -326,42 +357,84 @@ pub struct Escrow {
         bump:    u8  = data[16]
     ]
 )]
-pub fn process_make_instruction(accounts: &[AccountView], data: &[u8]) -> ProgramResult {
-    let [maker, mint_a, mint_b, escrow, vault, token_program] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys)
+pub fn process_make_instruction(accounts: &mut [AccountView], data: &[u8]) -> ProgramResult {
+    // All account bindings must be extracted contiguously before any other logic.
+    // See "Behavioral Notes" section 5.
+    let [maker, vault, mint_a, mint_b, escrow, token_program, system_program] = accounts else {
+        return Err(ProgramError::NotEnoughAccountKeys);
     };
+
+    let bump_bytes = [bump];
+    let signer_seeds = [
+        Seed::from(b"escrow"),
+        Seed::from(maker.address().as_array()),
+        Seed::from(bump_bytes.as_ref()),
+    ];
+    let signer = Signer::from(&signer_seeds);
+
+    CreateAccount {
+        from: maker,
+        to: escrow,
+        lamports: Rent::get()?.try_minimum_balance(Escrow::SPACE)?,
+        space: Escrow::SPACE as u64,
+        owner: &crate::ID,
+    }
+    .invoke_signed(&[signer])?;
+
+    let escrow_data = unsafe {
+        &mut *(escrow.borrow_unchecked_mut().as_mut_ptr() as *mut Escrow)
+    };
+
+    let mut maker_bytes = [0u8; 32];
+    maker_bytes.copy_from_slice(maker.address().as_ref());
+
+    escrow_data.maker = maker_bytes;
+    escrow_data.receive = receive;
+    escrow_data.seed = seed;
+    escrow_data.bump = bump;
+
+    pinocchio_associated_token_account::instructions::Create {
+        funding_account: maker,
+        account: vault,
+        wallet: escrow,
+        mint: mint_a,
+        token_program,
+        system_program,
+    }
+    .invoke()?;
+
     Ok(())
 }
 ```
 
 ---
 
-## How it Works
+## How It Works
 
 ```
-Your Pinocchio source (.rs files)
+Source files (src/**/*.rs)
         │
         ▼
-  pinocchio-idl build
+  pinocchio-idl generate
         │
-        ├─ Walks all .rs files in src/
-        ├─ Parses each file with `syn`
-        ├─ Discovers #[p_instruction], #[p_state], #[p_error], #[p_constant] items
-        ├─ Reads program name/version from Cargo.toml
-        └─ Serializes to Anchor-compatible idl.json
+        ├─ Recursively walks src/
+        ├─ Parses each file using syn
+        ├─ Collects #[p_instruction], #[p_state], #[p_error], #[p_constant] items
+        ├─ Reads program name and version from Cargo.toml
+        └─ Serialises to idl.json (Anchor-compatible)
 ```
 
-The `#[p_instruction]` and `#[p_state]` macros work **independently** of the CLI — they expand at Rust compile time, injecting validation code into your handlers. The CLI is a pure static analysis tool that re-parses your source without invoking the Rust compiler.
+The `#[p_instruction]` and `#[p_state]` macros operate independently of the CLI. They expand during the normal Rust compilation pass, injecting validation code into the annotated functions. The CLI is a pure static-analysis tool that re-parses source files without invoking the Rust compiler.
 
 ---
 
 ## IDL Output Format
 
-The generated `idl.json` follows the Anchor IDL spec and is also **Codama compatible**:
+The generated `idl.json` conforms to the Anchor IDL specification and is consumable by Codama:
 
 ```json
 {
-  "address": "<your program id>",
+  "address": "<program id>",
   "metadata": {
     "name": "your-program",
     "version": "0.1.0",
@@ -374,16 +447,17 @@ The generated `idl.json` follows the Anchor IDL spec and is also **Codama compat
       "discriminator": [0],
       "accounts": [
         { "name": "maker", "writable": true, "signer": true },
-        { 
-          "name": "escrow", 
-          "writable": true, 
-          "pda": { 
-             "seeds": [
-               { "kind": "const", "value": [101, 115, 99, 114, 111, 119] },
-               { "kind": "account", "path": "maker" },
-               { "kind": "arg", "path": "seed" }
-             ]
-          } 
+        {
+          "name": "escrow",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              { "kind": "const",   "value": [101, 115, 99, 114, 111, 119] },
+              { "kind": "account", "path": "maker" },
+              { "kind": "arg",     "path": "seed" },
+              { "kind": "arg",     "path": "bump" }
+            ]
+          }
         },
         { "name": "tokenProgram", "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" }
       ],
@@ -394,7 +468,9 @@ The generated `idl.json` follows the Anchor IDL spec and is also **Codama compat
       ]
     }
   ],
-  "accounts": [ { "name": "Escrow", "discriminator": [...] } ],
+  "accounts": [
+    { "name": "Escrow", "discriminator": [ ... ] }
+  ],
   "types": [
     {
       "name": "Escrow",
@@ -409,15 +485,159 @@ The generated `idl.json` follows the Anchor IDL spec and is also **Codama compat
     }
   ],
   "errors": [
-    { "code": 0,   "name": "AlreadyTaken", "msg": "The escrow has already been taken" },
-    { "code": 1,   "name": "ZeroAmount",   "msg": "The offer amount is zero" },
-    { "code": 100, "name": "InvalidMint",  "msg": "Invalid mint provided" }
+    { "code": 0,   "name": "AlreadyTaken", "msg": "The escrow has already been taken." },
+    { "code": 1,   "name": "ZeroAmount",   "msg": "The offer amount is zero." },
+    { "code": 100, "name": "InvalidMint",  "msg": "Invalid mint provided." }
   ],
   "constants": [
-    { "name": "ESCROW_VERSION",     "type": "u8",  "value": "1" },
-    { "name": "MAX_ESCROW_DURATION","type": "u64", "value": "60 * 60 * 24 * 30" }
+    { "name": "ESCROW_VERSION",      "type": "u8",  "value": "1" },
+    { "name": "MAX_ESCROW_DURATION", "type": "u64", "value": "60 * 60 * 24 * 30" }
   ]
 }
+```
+
+---
+
+## Behavioral Notes and Constraints
+
+The following behaviors are intrinsic to the current implementation. Failure to account for them may result in compile-time errors or incorrect on-chain validation.
+
+---
+
+### 1. PDA Bump Must Be an Explicit Seed
+
+`pinocchio-idl` does not implement bump-search (`find_program_address`-style) validation. PDA address derivation is performed against exactly the seed list provided; no automatic bump trial loop is executed.
+
+The bump must therefore be included as an explicit entry in the `pda = [...]` seed list, sourced from instruction data. Omitting it causes `derive_address` to operate on a different input than the canonical address and will result in account validation failure at runtime even for a correctly derived account.
+
+```rust
+// Incorrect — bump absent from seed list; on-chain PDA verification will always fail
+escrow(mut, pda = ["escrow", maker, seed], state = Escrow)
+
+// Correct — bump present as an explicit seed sourced from instruction data
+escrow(mut, pda = ["escrow", maker, seed, bump], state = Escrow)
+```
+
+The `data` section of the same instruction must declare the `bump` field:
+
+```rust
+data = [
+    seed:    u64 = data[0..8],
+    receive: u64 = data[8..16],
+    bump:    u8  = data[16]
+]
+```
+
+---
+
+### 2. The Generated IDL Contains the Bump as an Explicit Seed Entry
+
+Because bumps are passed as explicit seeds, the generated IDL records the bump as a seed of kind `arg`. Anchor client tooling that performs automatic bump inference — internally calling `findProgramAddressSync` and discarding the bump seed — will construct a seed list that does not match the on-chain verification.
+
+When consuming this IDL through such tooling, verify that client-side PDA derivation includes the bump as an explicit seed and matches the seed order declared in the IDL.
+
+```typescript
+// The bump must be passed explicitly on the client side
+const [escrowPda] = PublicKey.findProgramAddressSync(
+  [
+    Buffer.from("escrow"),
+    makerPubkey.toBuffer(),
+    seedBuffer,
+    Buffer.from([bump]),   // corresponds to the `arg` seed in the IDL
+  ],
+  programId
+);
+```
+
+---
+
+### 3. `ata = [...]` Requires Exactly Two Expressions
+
+The `ata` constraint expects exactly two expressions — the owner account followed by the mint account — in that order. Any other length is rejected at macro-expansion time.
+
+```rust
+// Correct — owner, then mint
+vault(mut, ata = [owner, mint_a])
+
+// Incorrect — single expression
+vault(mut, ata = [owner])
+
+// Incorrect — three expressions
+vault(mut, ata = [owner, mint_a, extra])
+```
+
+Note that the CLI's static IDL generation does not independently validate the length of `ata` lists. A malformed `ata` annotation may not be caught until the proc-macro expands during compilation.
+
+---
+
+### 4. Well-Known Program Account Names Are Resolved Automatically
+
+Accounts whose names match the following identifiers are automatically assigned the corresponding canonical mainnet address in the generated IDL, without requiring an explicit `address = "..."` annotation:
+
+| Account name | Resolved address |
+|---|---|
+| `system_program` | `11111111111111111111111111111111` |
+| `token_program` | `TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA` |
+| `token_2022_program` | `TokenzQdBNbEquZQ8KKDMkFJJExVEYQ2qqcKgLQv7JN` |
+| `associated_token_program` | `ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL` |
+| `rent` | `SysvarRent111111111111111111111111111111111` |
+| `clock` | `SysvarC1ock11111111111111111111111111111111` |
+
+If any of these names is used for an unrelated account, the resolution still applies. Use a distinct name or an explicit `address = "..."` override to suppress the inference:
+
+```rust
+// Rename or pin the address to prevent incorrect resolution
+my_custom_program(address = "ActualProgramAddressHere...")
+```
+
+---
+
+### 5. Account Extractions Must Be Contiguous at the Start of the Function Body
+
+The macro locates account variable bindings within the function body (array destructuring, direct indexing, or `.get()` / `.next()` calls) and inserts generated validation guards immediately after the final binding it identifies. 
+
+All account extraction statements must therefore appear contiguously at the top of the function body, before any other logic. Inserting an unrelated statement — such as a `msg!` call, an arithmetic expression, or an unrelated `let` binding — between account extractions will cause the injection point to be determined prematurely, potentially resulting in `"not found"` compile-time errors for subsequently declared accounts.
+
+```rust
+// Incorrect — a msg! call between account extractions shifts the injection point
+pub fn process(accounts: &mut [AccountView], data: &[u8]) -> ProgramResult {
+    let [maker, vault] = accounts else { return Err(...); };
+    msg!("processing");   // breaks the contiguous extraction block
+    // validation guards injected here, before remaining accounts are in scope
+    Ok(())
+}
+
+// Correct — all accounts extracted before any other logic
+pub fn process(accounts: &mut [AccountView], data: &[u8]) -> ProgramResult {
+    let [maker, vault, mint_a, escrow, token_program, system_program] = accounts else {
+        return Err(ProgramError::NotEnoughAccountKeys);
+    };
+    // Validation guards are injected here, after all bindings are in scope
+    msg!("processing");
+    Ok(())
+}
+```
+
+---
+
+### 6. Single-Index Data Fields Perform Unchecked Array Indexing
+
+Data fields declared with a single numeric index (`field: T = data[N]`) are implemented as a direct array index. If the instruction data slice is shorter than `N + 1` bytes, this will panic at runtime rather than returning a `ProgramError`.
+
+Range-based fields (`data[start..end]`) fail gracefully with `ProgramError::InvalidArgument` when the slice is too short.
+
+```rust
+data = [
+    seed:    u64 = data[0..8],   // safe — returns ProgramError::InvalidArgument on short input
+    receive: u64 = data[8..16],  // safe — returns ProgramError::InvalidArgument on short input
+    bump:    u8  = data[16]      // unsafe — panics if data.len() < 17
+]
+```
+
+To avoid runtime panics, either validate the minimum data length at the start of the handler, or use range-based extraction for all fields:
+
+```rust
+bump: u8 = data[16..17]
 ```
 
 ---
@@ -430,7 +650,7 @@ cd pinocchio-idl
 cargo build --workspace
 ```
 
-Run the tests:
+To run the test suite:
 
 ```bash
 cargo test --workspace
@@ -438,50 +658,49 @@ cargo test --workspace
 
 ---
 
-## Limitations & Roadmap
+## Limitations and Roadmap
 
-This is a beta project. The following known gaps exist:
+This project is under active development. The following constraints are present in the current release.
 
 ### Current Limitations
 
-| Area | Status |
+| Area | Notes |
 |---|---|
-| Pinocchio version > 0.10.0 | `AccountView` and updated PDA APIs from Pinocchio ≥ 0.11 are fully supported. Older pre-0.10 account types are not. |
-| Multi-file module re-exports | The CLI walks `src/` recursively but only discovers items annotated directly with `#[p_instruction]` / `#[p_state]` / `#[p_error]` / `#[p_constant]` — items re-exported via `pub use` from external crates are not picked up. |
-| No `cargo-pinocchio-idl` integration | Must be invoked as a standalone binary; no `cargo` subcommand plugin yet. |
-| Enum / struct field types in `#[p_state]` | Custom enum or nested struct fields are not sized automatically. Use a primitive or `[u8; N]` wrapper, or size the account manually. |
-
-
+| Pinocchio compatibility | `AccountView` and the updated PDA APIs introduced in Pinocchio ≥ 0.11 are fully supported. Versions prior to 0.10 are not. |
+| Multi-file module re-exports | The CLI traverses `src/` recursively, but only discovers items annotated directly with `#[p_instruction]`, `#[p_state]`, `#[p_error]`, or `#[p_constant]`. Items re-exported via `pub use` from external crates are not discovered. |
+| Cargo subcommand integration | The tool must be invoked as a standalone binary. A `cargo pinocchio-idl` subcommand plugin is not yet available. |
+| Complex field types in `#[p_state]` | Custom enum and nested struct fields cannot be sized automatically. Use a primitive type or a `[u8; N]` wrapper, or compute the account size manually. |
+| PDA bump-search validation | Bump-search (`find_program_address`-style) validation is not implemented. The bump must be supplied as an explicit seed. See [section 1](#1-pda-bump-must-be-an-explicit-seed). |
+| Single-index data field safety | `data[N]` fields perform unchecked indexing and will panic on malformed input. Prefer range-based extraction or pre-validate the data length. See [section 6](#6-single-index-data-fields-perform-unchecked-array-indexing). |
 
 ### Supported Account Binding Styles
 
-The `#[p_instruction]` macro parses your function body to automatically discover your account variables. It currently supports three common binding patterns:
+`#[p_instruction]` recognises three patterns for account variable extraction:
 
-**1. Array Destructuring:**
+**Array destructuring:**
 ```rust
-let [maker, vault, ...] = accounts else {
+let [maker, vault, mint_a, escrow] = accounts else {
     return Err(ProgramError::NotEnoughAccountKeys);
 };
 ```
 
-**2. Direct Indexing:**
+**Direct indexing:**
 ```rust
 let maker = &accounts[0];
 let vault = &accounts[1];
-...
 ```
 
-**3. Method Calls (`get` / `get_mut` / `next`):**
+**Method calls (`get`, `get_mut`, `next`):**
 ```rust
 let maker = accounts.get(0).ok_or(ProgramError::NotEnoughAccountKeys)?;
 let vault = accounts.get(1).ok_or(ProgramError::NotEnoughAccountKeys)?;
-...
 ```
 
+> Regardless of which style is used, all account extraction statements must appear contiguously at the start of the function body. See [section 5](#5-account-extractions-must-be-contiguous-at-the-start-of-the-function-body).
 
 ### Roadmap
 
 - [ ] Publish to crates.io
-- [ ] `cargo pinocchio-idl` plugin
-- [ ] `p_parse!` declarative macro for inline account unpacking + data parsing + security guards in a single call-site macro
-
+- [ ] `cargo pinocchio-idl` subcommand plugin
+- [ ] `p_parse!` declarative macro for combined account unpacking, data parsing, and security guard injection at a single call site
+- [ ] Graceful bounds checking for single-index data fields
