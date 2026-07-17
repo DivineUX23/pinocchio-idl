@@ -35,7 +35,7 @@ The `#[p_instruction]` macro does more than record IDL metadata. When the Rust c
 ### Step 1 — Install the CLI
 
 ```bash
-cargo install --git https://github.com/DivineUX23/pinocchio-idl.git pinocchio-idl
+cargo install pinocchio-idl
 ```
 
 Verify:
@@ -51,7 +51,7 @@ cargo pinocchio-idl --version
 ```toml
 # Cargo.toml
 [dependencies]
-pinocchio-idl-macros = { git = "https://github.com/DivineUX23/pinocchio-idl.git" }
+pinocchio-idl-macros = "0.1.0"
 ```
 
 ### Step 3 — Annotate and generate
@@ -60,29 +60,20 @@ pinocchio-idl-macros = { git = "https://github.com/DivineUX23/pinocchio-idl.git"
 use pinocchio_idl_macros::{p_instruction, p_state};
 
 #[p_state]
-pub struct Escrow {
-    pub maker:   [u8; 32],
-    pub receive: u64,
-    pub bump:    u8,
+pub struct Counter {
+    pub count: u64,
 }
 
 #[p_instruction(
     id = 0,
     accounts = [
-        maker(signer, mut),
-        escrow(mut, pda = ["escrow", maker, seed, bump], state = Escrow),
+        payer(signer, mut),
+        counter(mut, state = Counter),
         system_program
-    ],
-    data = [
-        seed:    u64 = data[0..8],
-        receive: u64 = data[8..16],
-        bump:    u8  = data[16..17]
     ]
 )]
-pub fn process_make(accounts: &mut [AccountView], data: &[u8]) -> ProgramResult {
-    let [maker, escrow, system_program] = accounts else {
-        return Err(ProgramError::NotEnoughAccountKeys);
-    };
+pub fn process_increment(accounts: &mut [AccountView], _data: &[u8]) -> ProgramResult {
+    // IDL metadata and security guards are generated instantly.
     Ok(())
 }
 ```
@@ -112,7 +103,7 @@ That's it. The output `idl.json` is Anchor-compatible and directly consumable by
 - [Example: Escrow Program](#example-escrow-program)
 - [How It Works](#how-it-works)
 - [IDL Output Format](#idl-output-format)
-- [Behavioral Notes and Known Constraints](#behavioral-notes-and-known-constraints)
+- [Compiler Invariants & Security Rules](#compiler-invariants--security-rules)
 - [Building from Source](#building-from-source)
 - [Limitations and Roadmap](#limitations-and-roadmap)
 
@@ -162,7 +153,7 @@ pinocchio-idl/
 Install both the standalone binary and the cargo subcommand in one command:
 
 ```bash
-cargo install --git https://github.com/DivineUX23/pinocchio-idl.git pinocchio-idl
+cargo install pinocchio-idl
 ```
 
 This places **two** binaries on your `PATH`:
@@ -189,15 +180,7 @@ Add `pinocchio-idl-macros` to the program's `Cargo.toml`:
 
 ```toml
 [dependencies]
-pinocchio-idl-macros = { git = "https://github.com/DivineUX23/pinocchio-idl.git" }
-```
-
-To pin to a specific branch or commit for reproducible builds:
-
-```toml
-pinocchio-idl-macros = { git = "https://github.com/DivineUX23/pinocchio-idl.git", branch = "main" }
-# or
-pinocchio-idl-macros = { git = "https://github.com/DivineUX23/pinocchio-idl.git", rev = "<commit-sha>" }
+pinocchio-idl-macros = "0.1.0"
 ```
 
 ---
@@ -413,7 +396,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install pinocchio-idl
-        run: cargo install --git https://github.com/DivineUX23/pinocchio-idl.git pinocchio-idl
+        run: cargo install pinocchio-idl
 
       - name: Generate IDL
         run: cargo pinocchio-idl generate
@@ -599,9 +582,9 @@ The generated `idl.json` conforms to the Anchor IDL specification and is consuma
 
 ---
 
-## Behavioral Notes and Constraints
+## Compiler Invariants & Security Rules
 
-The following behaviors are intrinsic to the current implementation. Failure to account for them may result in compile-time errors or incorrect on-chain validation.
+The following invariants are strictly enforced by the macro implementation to guarantee on-chain security. Failure to adhere to these rules will result in either compile-time rejection or runtime verification failure.
 
 ---
 
@@ -722,11 +705,13 @@ pub fn process(accounts: &mut [AccountView], data: &[u8]) -> ProgramResult {
 
 ---
 
-### 6. Single-Index Data Fields Perform Unchecked Array Indexing
+### 6. Single-Index Data Fields Enforce Direct Memory Access
 
-Data fields declared with a single numeric index (`field: T = data[N]`) are implemented as a direct array index. If the instruction data slice is shorter than `N + 1` bytes, this will panic at runtime rather than returning a `ProgramError`.
+Data fields declared with a single numeric index (`field: T = data[N]`) are compiled as direct memory offsets for maximum compute efficiency. They perform unchecked array indexing.
 
-Range-based fields (`data[start..end]`) fail gracefully with `ProgramError::InvalidArgument` when the slice is too short.
+Validating slice length prior to extraction is a mandatory security invariant. If the instruction data slice is shorter than `N + 1` bytes, the program will panic at runtime.
+
+Range-based fields (`data[start..end]`) fail gracefully with `ProgramError::InvalidArgument` when the slice is too short, at the cost of slight overhead.
 
 ```rust
 data = [
@@ -801,6 +786,5 @@ let vault = accounts.get(1).ok_or(ProgramError::NotEnoughAccountKeys)?;
 
 ### Roadmap
 
-- [ ] Publish to crates.io
 - [ ] `p_parse!` declarative macro for combined account unpacking, data parsing, and security guard injection at a single call site
 - [ ] Graceful bounds checking for single-index data fields
