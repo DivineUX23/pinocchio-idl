@@ -53,7 +53,7 @@ pub struct Escrow {
     data = [
         seed: u64 = data[0..8],
         receive: u64 = data[8..16],
-        bump: u8 = data[16]
+        bump: u8 = data[16..17]
     ]
 )]
 pub fn process_make_instruction(accounts: &mut [AccountView], data: &[u8]) -> ProgramResult {
