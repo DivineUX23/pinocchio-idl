@@ -42,7 +42,7 @@ fn main() -> ExitCode {
     let cli = Cli::parse();
 
     if let Err(e) = run(cli) {
-        eprint!("Fatal Error: {e}");
+        eprint!("Fatal Error: {:?}", e);
         return ExitCode::FAILURE;
     }
 

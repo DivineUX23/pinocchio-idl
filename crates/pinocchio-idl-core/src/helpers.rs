@@ -180,9 +180,20 @@ pub fn rust_to_idl(ty: &Type) -> syn::Result<FieldType> {
             }
         }
 
+        Type::Reference(r) => rust_to_idl(&r.elem),
+
+        Type::Slice(s) => {
+            let inner = rust_to_idl(&s.elem)?;
+            if inner == FieldType::Simple("u8".to_string()) {
+                Ok(FieldType::Simple("bytes".to_string()))
+            } else {
+                Ok(FieldType::Vec(Box::new(inner)))
+            }
+        }
+
         other => Err(syn::Error::new_spanned(
             other,
-            "unsupported data type in #[p_instruction(...)] or #[p_state], use a primitive, `Pubkey`, `Address`, `Vec<T>`, or `Option<T>`",
+            "unsupported data type in #[p_instruction(...)], #[p_state] or #[p_constant], use a primitive, `Pubkey`, `Address`, `Vec<T>`, `Option<T>`, &T, [T], or [T; N]",
         )),
     }
 }
