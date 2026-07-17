@@ -5,6 +5,7 @@ edition.workspace = true
 description = "Compile-time account validation and automated Anchor IDL generation macros for Pinocchio Solana programs."
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/DivineUX23/pinocchio-idl"
+readme = "../../README.md"
 keywords = ["solana", "pinocchio", "anchor", "proc-macro", "account-validation"]
 categories = ["development-tools::procedural-macro-helpers", "development-tools", "cryptography::cryptocurrencies"]
 
