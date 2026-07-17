@@ -1,8 +1,8 @@
 use pinocchio::{
+    AccountView, ProgramResult,
     cpi::{Seed, Signer},
     error::ProgramError,
-    sysvars::{rent::Rent, Sysvar},
-    AccountView, ProgramResult,
+    sysvars::{Sysvar, rent::Rent},
 };
 use pinocchio_idl_macros::{p_constant, p_error, p_instruction, p_state};
 use pinocchio_system::instructions::CreateAccount;
@@ -57,7 +57,16 @@ pub struct Escrow {
     ]
 )]
 pub fn process_make_instruction(accounts: &mut [AccountView], data: &[u8]) -> ProgramResult {
-    let [maker, vault, mint_a, mint_b, escrow, token_program, system_program] = accounts else {
+    let [
+        maker,
+        vault,
+        mint_a,
+        mint_b,
+        escrow,
+        token_program,
+        system_program,
+    ] = accounts
+    else {
         return Err(ProgramError::NotEnoughAccountKeys);
     };
 

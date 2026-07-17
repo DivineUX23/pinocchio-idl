@@ -86,3 +86,60 @@ jobs:
 
       - name: Build on MSRV
         run: cargo build --workspace
+
+  idl-snapshot:
+    name: IDL Snapshot
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build CLI
+        run: cargo build -p pinocchio-idl --bin pinocchio-idl
+
+      - name: Regenerate escrow-fixture IDL
+        run: |
+          ./target/debug/pinocchio-idl generate \
+            --manifest-path crates/fixtures/escrow-fixture/Cargo.toml \
+            --out crates/fixtures/escrow-fixture/expected/idl.actual.json
+
+      - name: Diff against committed snapshot
+        run: |
+          diff \
+            crates/fixtures/escrow-fixture/expected/idl.json \
+            crates/fixtures/escrow-fixture/expected/idl.actual.json \
+            || (echo "IDL output has changed. Run the generator locally and commit the updated snapshot." && exit 1)
+
+  macro-expansion:
+    name: Macro Expansion Snapshot
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install nightly toolchain
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustfmt
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-expand
+        run: cargo install cargo-expand --locked
+
+      - name: Expand escrow-fixture macros
+        run: |
+          cargo expand --package escrow-fixture --lib 2>/dev/null \
+            > crates/fixtures/escrow-fixture/expected/expanded.actual.rs
+
+      - name: Diff against committed snapshot
+        run: |
+          diff \
+            crates/fixtures/escrow-fixture/expected/expanded.rs \
+            crates/fixtures/escrow-fixture/expected/expanded.actual.rs \
+            || (echo "Macro expansion has changed. Run 'cargo expand --package escrow-fixture --lib > crates/fixtures/escrow-fixture/expected/expanded.rs' locally and commit the updated snapshot." && exit 1)
