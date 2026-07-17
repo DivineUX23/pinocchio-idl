@@ -390,6 +390,45 @@ The output is a valid Anchor-compatible IDL and is directly consumable by [Codam
 
 ---
 
+### 4. GitHub Actions CI
+
+Automate IDL generation in your CI pipeline to ensure your IDL stays in sync with your program source. Add this to your `.github/workflows/main.yml`:
+
+```yaml
+name: Generate IDL
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  generate-idl:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install pinocchio-idl
+        run: cargo install --git https://github.com/DivineUX23/pinocchio-idl.git pinocchio-idl
+
+      - name: Generate IDL
+        run: cargo pinocchio-idl generate
+        # Optional: Specify manifest/out path if not at root
+        # run: cargo pinocchio-idl generate -m programs/my-program/Cargo.toml -o idl.json
+
+      - name: Upload IDL Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: program-idl
+          path: idl.json # Match your output path
+```
+
+---
+
 ## Example: Escrow Program
 
 A self-contained reference implementation is available in [`crates/fixtures/escrow-fixture/src/lib.rs`](crates/fixtures/escrow-fixture/src/lib.rs). Additional programs annotated with `pinocchio-idl` are maintained in the [pinocchio-idl-examples](https://github.com/DivineUX23/pinocchio-idl-examples) repository.
