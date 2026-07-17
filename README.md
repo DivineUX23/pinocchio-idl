@@ -1,8 +1,8 @@
 # pinocchio-idl
 
-[![Crates.io](https://img.shields.io/crates/v/pinocchio-idl)](https://crates.io/crates/pinocchio-idl)
-[![CI](https://github.com/DivineUX23/pinocchio-idl/actions/workflows/main.yml/badge.svg)](https://github.com/DivineUX23/pinocchio-idl/actions)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE-MIT)
+[![Crates.io Version](https://img.shields.io/crates/v/pinocchio-idl)](https://crates.io/crates/pinocchio-idl)
+[![Crates.io License](https://img.shields.io/crates/l/pinocchio-idl)](https://crates.io/crates/pinocchio-idl)
+[![CI](https://github.com/DivineUX23/pinocchio-idl/actions/workflows/ci.yml/badge.svg)](https://github.com/DivineUX23/pinocchio-idl/actions/workflows/ci.yml)
 [![Rust: 1.85+](https://img.shields.io/badge/rust-1.85%2B-orange)](https://www.rust-lang.org)
 
 > **The official IDL toolchain for [Pinocchio](https://github.com/anza-xyz/pinocchio) Solana programs.**
