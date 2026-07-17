@@ -447,10 +447,6 @@ dependencies = [
 [[package]]
 name = "pinocchio-idl"
 version = "0.1.0"
-
-[[package]]
-name = "pinocchio-idl-cli"
-version = "0.1.0"
 dependencies = [
  "anyhow",
  "cargo_toml",

@@ -1,8 +1,8 @@
 [package]
-name = "pinocchio-idl-cli"
+name = "pinocchio-idl"
 version.workspace = true
 edition.workspace = true
-description = "CLI tool to generate Anchor-compatible IDLs from Pinocchio Solana programs"
+description = "Generate Anchor-compatible IDLs from Pinocchio Solana programs. Bridges lightweight smart contracts with standard frontend tooling."
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/DivineUX23/pinocchio-idl"
 readme = "../../README.md"
@@ -16,6 +16,10 @@ path = "src/lib.rs"
 [[bin]]
 name = "pinocchio-idl"
 path = "src/main.rs"
+
+[[bin]]
+name = "cargo-pinocchio-idl"
+path = "src/cargo_main.rs"
 
 
 [dependencies]

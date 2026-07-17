@@ -1,10 +1,102 @@
 # pinocchio-idl
 
-IDL generation tooling for [Pinocchio](https://github.com/febo/pinocchio) Solana programs.
+> **The official IDL toolchain for [Pinocchio](https://github.com/febo/pinocchio) Solana programs.**
+> Generate Anchor-compatible IDLs — no Anchor, no framework, zero runtime overhead.
 
-`pinocchio-idl` provides IDL generation for the Pinocchio ecosystem without requiring Anchor, framework wrappers, or any additional runtime dependencies. Two proc-macro attributes applied to instruction handlers and account state structs, combined with a single CLI invocation, produce a fully-structured `idl.json` compatible with both the [Anchor IDL specification](https://www.anchor-lang.com/) and [Codama](https://github.com/codama-idl/codama).
+---
 
-The macros serve a dual purpose: they emit IDL metadata and inject security validation — account-count bounds checks, signer and writable guards, PDA verification, and ATA state checks — directly into instruction handlers at compile time. The result is correctness enforcement with no runtime overhead and no framework in the dependency graph.
+### What it does
+
+Solana programs need an IDL (Interface Definition Language) file so that client tools — TypeScript SDKs, explorers, Codama code generators — know how to talk to them. Anchor programs get this for free. Pinocchio programs, which deliberately avoid Anchor to stay lean, previously had no standard way to produce one.
+
+`pinocchio-idl` fills that gap. You annotate your existing Pinocchio code with a small set of proc-macro attributes, run one CLI command, and get a fully-structured `idl.json` that is 100% compatible with the [Anchor IDL specification](https://www.anchor-lang.com/) and [Codama](https://github.com/codama-idl/codama). No Anchor crate, no framework wrapper, no extra binary in your dependency graph.
+
+### How it works in one sentence
+
+**Annotate with macros → run the CLI → get `idl.json`.**
+
+### The two moving parts
+
+| Part | What you add to your project | What it does |
+|---|---|---|
+| **`pinocchio-idl-macros`** | A dev dependency in your program's `Cargo.toml` | Proc-macro attributes (`#[p_instruction]`, `#[p_state]`, `#[p_error]`, `#[p_constant]`) that do two things at once: emit IDL metadata **and** inject compile-time security guards into your instruction handlers |
+| **`pinocchio-idl` CLI** | A binary on your dev machine (not shipped with your program) | Walks your source tree, reads the annotations, and serialises `idl.json` — no Rust compiler invocation, pure static analysis |
+
+### The compile-time security guarantee
+
+The `#[p_instruction]` macro does more than record IDL metadata. When the Rust compiler processes your code it rewrites the annotated function to prepend validation guards — account-count bounds checks, per-account `signer` and `writable` checks, PDA address verification, and ATA state validation — before any of your instruction logic runs. These guards are generated entirely at compile time. There is no runtime framework, no trait vtable, no dynamic dispatch. The compiled program is as lean as a hand-written Pinocchio program.
+
+---
+
+## Quick Start
+
+> **Three steps: install the CLI → annotate your program → generate the IDL.**
+
+### Step 1 — Install the CLI
+
+```bash
+cargo install --git https://github.com/DivineUX23/pinocchio-idl.git pinocchio-idl
+```
+
+Verify:
+
+```bash
+pinocchio-idl --version
+# or
+cargo pinocchio-idl --version
+```
+
+### Step 2 — Add the macro dependency to your program
+
+```toml
+# Cargo.toml
+[dependencies]
+pinocchio-idl-macros = { git = "https://github.com/DivineUX23/pinocchio-idl.git" }
+```
+
+### Step 3 — Annotate and generate
+
+```rust
+use pinocchio_idl_macros::{p_instruction, p_state};
+
+#[p_state]
+pub struct Escrow {
+    pub maker:   [u8; 32],
+    pub receive: u64,
+    pub bump:    u8,
+}
+
+#[p_instruction(
+    id = 0,
+    accounts = [
+        maker(signer, mut),
+        escrow(mut, pda = ["escrow", maker, seed, bump], state = Escrow),
+        system_program
+    ],
+    data = [
+        seed:    u64 = data[0..8],
+        receive: u64 = data[8..16],
+        bump:    u8  = data[16..17]
+    ]
+)]
+pub fn process_make(accounts: &mut [AccountView], data: &[u8]) -> ProgramResult {
+    let [maker, escrow, system_program] = accounts else {
+        return Err(ProgramError::NotEnoughAccountKeys);
+    };
+    Ok(())
+}
+```
+
+```bash
+# Run from the directory containing your Cargo.toml
+pinocchio-idl generate
+# → idl.json written to the current directory
+
+# Or as a cargo subcommand
+cargo pinocchio-idl generate
+```
+
+That's it. The output `idl.json` is Anchor-compatible and directly consumable by [Codama](https://github.com/codama-idl/codama).
 
 ---
 
@@ -67,18 +159,24 @@ pinocchio-idl/
 
 ### CLI
 
-The `pinocchio-idl` binary can be installed directly from this repository. A crates.io release is not yet available.
+Install both the standalone binary and the cargo subcommand in one command:
 
 ```bash
-cargo install --git https://github.com/DivineUX23/pinocchio-idl.git pinocchio-idl-cli
+cargo install --git https://github.com/DivineUX23/pinocchio-idl.git pinocchio-idl
 ```
 
-Cargo will clone the repository, compile `pinocchio-idl-cli`, and place the resulting `pinocchio-idl` binary on the `PATH`.
+This places **two** binaries on your `PATH`:
+
+| Binary | Invoked as |
+|---|---|
+| `pinocchio-idl` | `pinocchio-idl generate` |
+| `cargo-pinocchio-idl` | `cargo pinocchio-idl generate` |
 
 Confirm the installation:
 
 ```bash
 pinocchio-idl --version
+cargo pinocchio-idl --version
 ```
 
 ---
@@ -267,18 +365,25 @@ The CLI reads the constant's name, type, and value expression directly from the 
 
 ### 3. Generating the IDL
 
-Run the following command from the directory containing the program's `Cargo.toml`:
+Run either command from the directory containing the program's `Cargo.toml`:
 
 ```bash
+# Standalone binary
 pinocchio-idl generate
+
+# Cargo subcommand (identical behaviour)
+cargo pinocchio-idl generate
 ```
 
-This produces `idl.json` in the current directory. Available options:
+Both produce `idl.json` in the current directory. Available options:
 
 ```bash
 pinocchio-idl generate \
   --manifest-path path/to/Cargo.toml \     # default: ./Cargo.toml
-  --out target/idl/my_program.idl.json     # default: ./idl.json
+  --out target/idl/my_program.idl.json \   # default: ./idl.json
+  --src path/to/src                        # default: derived from Cargo.toml
+
+# Same flags work with cargo pinocchio-idl generate
 ```
 
 The output is a valid Anchor-compatible IDL and is directly consumable by [Codama](https://github.com/codama-idl/codama) for automated client-code generation in TypeScript, Rust, and other target languages.
@@ -626,7 +731,6 @@ This project is under active development. The following constraints are present 
 |---|---|
 | Pinocchio compatibility | `AccountView` and the updated PDA APIs introduced in Pinocchio ≥ 0.11 are fully supported. Versions prior to 0.10 are not. |
 | Multi-file module re-exports | The CLI traverses `src/` recursively, but only discovers items annotated directly with `#[p_instruction]`, `#[p_state]`, `#[p_error]`, or `#[p_constant]`. Items re-exported via `pub use` from external crates are not discovered. |
-| Cargo subcommand integration | The tool must be invoked as a standalone binary. A `cargo pinocchio-idl` subcommand plugin is not yet available. |
 | Complex field types in `#[p_state]` | Custom enum and nested struct fields cannot be sized automatically. Use a primitive type or a `[u8; N]` wrapper, or compute the account size manually. |
 | PDA bump-search validation | Bump-search (`find_program_address`-style) validation is not implemented. The bump must be supplied as an explicit seed. See [section 1](#1-pda-bump-must-be-an-explicit-seed). |
 | Single-index data field safety | `data[N]` fields perform unchecked indexing and will panic on malformed input. Prefer range-based extraction or pre-validate the data length. See [section 6](#6-single-index-data-fields-perform-unchecked-array-indexing). |
@@ -659,6 +763,5 @@ let vault = accounts.get(1).ok_or(ProgramError::NotEnoughAccountKeys)?;
 ### Roadmap
 
 - [ ] Publish to crates.io
-- [ ] `cargo pinocchio-idl` subcommand plugin
 - [ ] `p_parse!` declarative macro for combined account unpacking, data parsing, and security guard injection at a single call site
 - [ ] Graceful bounds checking for single-index data fields

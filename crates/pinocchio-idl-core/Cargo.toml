@@ -2,7 +2,7 @@
 name = "pinocchio-idl-core"
 version.workspace = true
 edition.workspace = true
-description = "Core IDL types and structures for pinocchio-idl, an Anchor-compatible IDL generator for Pinocchio Solana programs"
+description = "Zero-cost core IDL types and structures for pinocchio-idl, an Anchor-compatible IDL generator for Pinocchio Solana programs"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/DivineUX23/pinocchio-idl"
 readme = "../../README.md"

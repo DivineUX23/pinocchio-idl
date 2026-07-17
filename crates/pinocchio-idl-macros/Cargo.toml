@@ -2,12 +2,12 @@
 name = "pinocchio-idl-macros"
 version.workspace = true
 edition.workspace = true
-description = "Procedural macros for IDL generation and compile-time account validation in Pinocchio programs"
+description = "Compile-time account validation and automated Anchor IDL generation macros for Pinocchio Solana programs."
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/DivineUX23/pinocchio-idl"
 readme = "../../README.md"
 keywords = ["solana", "pinocchio", "anchor", "proc-macro", "account-validation"]
-categories = ["development-tools::procedural-macro-helpers", "cryptography::cryptocurrencies"]
+categories = ["development-tools::procedural-macro-helpers", "development-tools", "cryptography::cryptocurrencies"]
 
 [lib]
 proc-macro = true

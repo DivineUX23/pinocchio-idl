@@ -7,14 +7,14 @@ use std::time::Instant;
 
 #[derive(Parser)]
 #[command(
-    name = "pinocchio-idl",
+    name = "cargo pinocchio-idl",
     version,
-    about = "Generate an Anchor-compatible IDL for Pinocchio Solana program",
-    long_about = "The official CLI for generating Anchor-compatible IDL files from Pinocchio programs.\n\n\
-                  Zero runtime overhead. Full Anchor + Codama compatibility.",
+    about = "Generate an Anchor-compatible IDL for Pinocchio Solana programs (cargo subcommand)",
+    long_about = "The official cargo subcommand for generating Anchor-compatible IDL files from \
+                  Pinocchio programs.\n\nZero runtime overhead. Full Anchor + Codama compatibility.",
     after_help = "EXAMPLES:\n    \
-                  pinocchio-idl generate\n    \
-                  pinocchio-idl generate --manifest-path ./Cargo.toml --out ./target/idl.json"
+                  cargo pinocchio-idl generate\n    \
+                  cargo pinocchio-idl generate --manifest-path ./Cargo.toml --out ./target/idl.json"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -23,7 +23,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Generate an Anchor-compatible IDL from a Pinocchio program (default command)
+    /// Generate an Anchor-compatible IDL from a Pinocchio program
     Generate {
         /// Path to Cargo.toml
         #[arg(long, short = 'm', default_value = "Cargo.toml")]
@@ -40,38 +40,25 @@ enum Command {
 }
 
 fn main() -> ExitCode {
-    let cli = Cli::parse();
+    let args: Vec<String> = std::env::args()
+        .enumerate()
+        .filter_map(|(i, arg)| {
+            if i == 1 && arg == "pinocchio-idl" {
+                None
+            } else {
+                Some(arg)
+            }
+        })
+        .collect();
+
+    let cli = Cli::parse_from(args);
 
     if let Err(e) = run(cli) {
-        eprint!("Fatal Error: {:?}", e);
+        eprintln!("Fatal Error: {:?}", e);
         return ExitCode::FAILURE;
     }
 
     ExitCode::SUCCESS
-
-    /*
-    match cli.command {
-        Command::Generate { manifest_path, out } => {
-            let src_dir = manifest_path.parent().unwrap_or(Path::new(".")).join("src");
-
-            let metadata = read_metadata(&manifest_path).unwrap_or_else(|e| {
-                eprintln!("{e}");
-                std::process::exit(1);
-            });
-
-            let result = build_idl(&src_dir, metadata)
-                .map_err(|e| e.to_string())
-                .and_then(|idl| write_idl(&idl, &out).map_err(|e| e.to_string()));
-
-            if let Err(msg) = result {
-                eprintln!("{msg}");
-                std::process::exit(1);
-            }
-
-            println!("wrote {}", out.display());
-        }
-    }
-    */
 }
 
 fn run(cli: Cli) -> Result<()> {
