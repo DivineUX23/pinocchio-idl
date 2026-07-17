@@ -3,7 +3,7 @@
 [![Crates.io Version](https://img.shields.io/crates/v/pinocchio-idl)](https://crates.io/crates/pinocchio-idl)
 [![Crates.io License](https://img.shields.io/crates/l/pinocchio-idl)](https://crates.io/crates/pinocchio-idl)
 [![CI](https://github.com/DivineUX23/pinocchio-idl/actions/workflows/ci.yml/badge.svg)](https://github.com/DivineUX23/pinocchio-idl/actions/workflows/ci.yml)
-[![Rust: 1.85+](https://img.shields.io/badge/rust-1.85%2B-orange)](https://www.rust-lang.org)
+[![Rust: 1.89+](https://img.shields.io/badge/rust-1.89%2B-orange)](https://www.rust-lang.org)
 
 > **The official IDL toolchain for [Pinocchio](https://github.com/anza-xyz/pinocchio) Solana programs.**
 > Write Solana programs with Pinocchio's raw performance and Anchor's developer experience. `pinocchio-idl` injects compile-time security guards and generates 100% Codama-compatible IDLs with zero runtime framework bloat.
@@ -158,7 +158,7 @@ pinocchio-idl/
 
 ## Installation
 
-**Minimum Supported Rust Version:** 1.85 (Rust 2024 edition)
+**Minimum Supported Rust Version:** 1.89
 
 ### CLI
 
