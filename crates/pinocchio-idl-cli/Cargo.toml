@@ -1,11 +1,12 @@
 [package]
 name = "pinocchio-idl-cli"
-version = "0.1.0"
-edition = "2024"
-description = "CLI for generating IDLs for Pinocchio Solana programs"
+version.workspace = true
+edition.workspace = true
+description = "CLI tool to generate Anchor-compatible IDLs from Pinocchio Solana programs"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/DivineUX23/pinocchio-idl"
-keywords = ["solana", "pinocchio", "idl", "anchor", "codegen"]
+readme = "../../README.md"
+keywords = ["solana", "anchor", "idl", "pinocchio", "codegen"]
 categories = ["development-tools::build-utils", "command-line-utilities", "cryptography::cryptocurrencies"]
 
 [lib]

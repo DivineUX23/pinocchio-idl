@@ -1,8 +1,8 @@
 [package]
 name = "pinocchio-idl-core"
-version = "0.1.0"
-edition = "2024"
-description = "Core types and structures for Pinocchio IDL generation"
+version.workspace = true
+edition.workspace = true
+description = "Core IDL types and structures for pinocchio-idl, an Anchor-compatible IDL generator for Pinocchio Solana programs"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/DivineUX23/pinocchio-idl"
 readme = "../../README.md"
@@ -10,9 +10,9 @@ keywords = ["solana", "pinocchio", "idl", "anchor", "codegen"]
 categories = ["development-tools::build-utils", "encoding", "cryptography::cryptocurrencies"]
 
 [dependencies]
-proc-macro2 = "1.0.106"
-quote = "1.0.45"
-syn = {version = "2.0.118", features = ["full", "extra-traits"] }
+proc-macro2 = { workspace = true }
+quote = { workspace = true }
+syn = { workspace = true }
 serde = { workspace = true }
 sha2 = { workspace = true }
 bs58 = "0.5.1"
