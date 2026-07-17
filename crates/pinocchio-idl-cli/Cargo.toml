@@ -5,7 +5,6 @@ edition.workspace = true
 description = "Generate Anchor-compatible IDLs from Pinocchio Solana programs. Bridges lightweight smart contracts with standard frontend tooling."
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/DivineUX23/pinocchio-idl"
-readme = "../../README.md"
 keywords = ["solana", "anchor", "idl", "pinocchio", "codegen"]
 categories = ["development-tools::build-utils", "command-line-utilities", "cryptography::cryptocurrencies"]
 
