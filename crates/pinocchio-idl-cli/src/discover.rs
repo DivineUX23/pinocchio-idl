@@ -13,6 +13,7 @@ pub struct DiscoveredInstruction {
 pub struct Discovery {
     pub instructions: Vec<DiscoveredInstruction>,
     pub states: Vec<(ItemStruct, std::path::PathBuf)>,
+    pub events: Vec<(ItemStruct, std::path::PathBuf)>,
     pub errors: Vec<(ItemEnum, std::path::PathBuf)>,
     pub constants: Vec<(ItemConst, std::path::PathBuf)>,
     pub program_id: Option<String>,

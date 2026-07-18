@@ -27,6 +27,12 @@ pub fn p_instruction(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let mut func = parse_macro_input!(item as ItemFn);
 
+    if !parsed_attr.inject {
+        return TokenStream::from(quote! {
+            #func
+        });
+    }
+
     let mut injected_statement = Vec::new();
 
     let required = parsed_attr.accounts.len();
@@ -261,8 +267,30 @@ pub fn p_instruction(attr: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 #[proc_macro_attribute]
-pub fn p_state(_attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn p_state(attr: TokenStream, item: TokenStream) -> TokenStream {
     let item_struct = parse_macro_input!(item as ItemStruct);
+
+    let mut is_inject = false;
+
+    let attr_parser = syn::meta::parser(|meta| {
+        if meta.path.is_ident("inject") {
+            is_inject = true;
+            Ok(())
+        } else {
+            return Err(syn::Error::new_spanned(
+                &meta.path,
+                "unsupported #[p_state] attribute argument - inject is the only supported argument.",
+            ));
+        }
+    });
+
+    parse_macro_input!(attr with attr_parser);
+
+    if !is_inject {
+        return TokenStream::from(quote! {
+            #item_struct
+        });
+    }
 
     /*
     let fields = match &item_struct.fields {
@@ -317,4 +345,45 @@ pub fn p_error(_attr: TokenStream, item: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn p_constant(_attr: TokenStream, item: TokenStream) -> TokenStream {
     item
+}
+
+#[proc_macro_attribute]
+pub fn p_event(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let item_struct = parse_macro_input!(item as syn::ItemStruct);
+    let struct_name = &item_struct.ident;
+
+    let mut is_inject = false;
+
+    let attr_parser = syn::meta::parser(|meta| {
+        if meta.path.is_ident("inject") {
+            is_inject = true;
+            Ok(())
+        } else {
+            return Err(syn::Error::new_spanned(
+                &meta.path,
+                "unsupported #[p_event] attribute argument - inject is the only supported argument.",
+            ));
+        }
+    });
+
+    parse_macro_input!(attr with attr_parser);
+
+    if !is_inject {
+        return TokenStream::from(quote! {
+            #item_struct
+        });
+    }
+
+    let discriminator = pinocchio_idl_core::event_discriminator(&struct_name.to_string());
+    let disc_bytes = discriminator.iter().map(|b| quote! { #b });
+
+    TokenStream::from(quote! {
+        #[repr(C)]
+        #item_struct
+
+        impl #struct_name {
+            pub const SPACE: usize = std::mem::size_of::<Self>();
+            pub const DISCRIMINATOR: [u8; 8] = [#(#disc_bytes),*];
+        }
+    })
 }

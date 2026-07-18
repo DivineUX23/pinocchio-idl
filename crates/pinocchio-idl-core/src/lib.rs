@@ -6,6 +6,7 @@ use syn::{
 pub mod account_fields;
 pub mod cli_struct;
 pub mod helpers;
+pub mod render;
 
 pub use account_fields::*;
 pub use cli_struct::*;
@@ -14,6 +15,7 @@ pub use helpers::*;
 #[derive(Debug)]
 pub struct Instruction {
     pub id: Option<u8>,
+    pub inject: bool,
     pub accounts: Vec<Account>,
     pub data: Option<Vec<Data>>,
 }
@@ -21,6 +23,7 @@ pub struct Instruction {
 impl Parse for Instruction {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let mut id = None;
+        let mut inject = false;
         let mut accounts = Vec::new();
         let mut data = None;
 
@@ -31,6 +34,8 @@ impl Parse for Instruction {
                 input.parse::<Token![=]>()?;
                 let lit: LitInt = input.parse()?;
                 id = Some(lit.base10_parse()?);
+            } else if ident == "inject" {
+                inject = true;
             } else if ident == "accounts" {
                 input.parse::<Token![=]>()?;
                 let content;
@@ -103,7 +108,12 @@ impl Parse for Instruction {
         }
         */
 
-        Ok(Instruction { id, accounts, data })
+        Ok(Instruction {
+            id,
+            inject,
+            accounts,
+            data,
+        })
     }
 }
 

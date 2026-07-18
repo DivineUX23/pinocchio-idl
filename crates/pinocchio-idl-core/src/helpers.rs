@@ -124,6 +124,12 @@ pub fn account_discriminator(struct_name: &str) -> [u8; 8] {
     Sha256::digest(preimage.as_bytes())[..8].try_into().unwrap()
 }
 
+pub fn event_discriminator(struct_name: &str) -> [u8; 8] {
+    use sha2::{Digest, Sha256};
+    let preimage = format!("event:{struct_name}");
+    Sha256::digest(preimage.as_bytes())[..8].try_into().unwrap()
+}
+
 pub fn derive_instruction_name(ident: &Ident) -> String {
     ident.to_string()
 }

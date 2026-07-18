@@ -4,7 +4,7 @@ use pinocchio::{
     error::ProgramError,
     sysvars::{Sysvar, rent::Rent},
 };
-use pinocchio_idl_macros::{p_constant, p_error, p_instruction, p_state};
+use pinocchio_idl_macros::{p_constant, p_error, p_event, p_instruction, p_state};
 use pinocchio_system::instructions::CreateAccount;
 
 pinocchio::address::declare_id!("11111111111111111111111111111111111111111");
@@ -28,7 +28,7 @@ pub enum EscrowError {
     Expired,
 }
 
-#[p_state]
+#[p_state(inject)]
 pub struct Escrow {
     pub seed: u64,
     pub maker: [u8; 32],
@@ -41,6 +41,7 @@ pub struct Escrow {
 
 #[p_instruction(
     id = 0,
+    inject,
     accounts = [
         maker(signer, mut),
         vault(mut, init=[escrow, mint_a]),
@@ -89,8 +90,8 @@ pub fn process_make_instruction(accounts: &mut [AccountView], data: &[u8]) -> Pr
     let system_program = accounts.get(6).ok_or(ProgramError::NotEnoughAccountKeys)?;
     */
 
-    let _disc = Escrow::DISCRIMINATOR;
-    let _space = Escrow::SPACE;
+    //let _disc = Escrow::DISCRIMINATOR;
+    //let _space = Escrow::SPACE;
 
     let bump_bytes = [bump];
     let signer_seeds = [
@@ -138,4 +139,10 @@ pub fn process_make_instruction(accounts: &mut [AccountView], data: &[u8]) -> Pr
     .invoke()?;
 
     Ok(())
+}
+
+#[p_event]
+pub struct EscrowCreated {
+    pub maker: [u8; 32],
+    pub amount: u64,
 }

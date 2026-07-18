@@ -75,6 +75,49 @@ fn state_to_idl(item: &ItemStruct) -> syn::Result<(IdlAccountDef, IdlTypeDefinit
     ))
 }
 
+fn event_to_idl(item: &ItemStruct) -> syn::Result<(pinocchio_idl_core::IdlEvent, IdlTypeDefinition)> {
+    let name = item.ident.to_string();
+
+    let fields = match &item.fields {
+        Fields::Named(named) => named
+            .named
+            .iter()
+            .map(|f| {
+                let field_name = f
+                    .ident
+                    .as_ref()
+                    .ok_or_else(|| syn::Error::new_spanned(f, "event fields must be named"))?
+                    .to_string();
+
+                Ok(IdlField {
+                    name: field_name,
+                    r#type: rust_to_idl(&f.ty)?,
+                })
+            })
+            .collect::<syn::Result<Vec<_>>>()?,
+        other => {
+            return Err(syn::Error::new_spanned(
+                other,
+                "#[p_event] requires named fields",
+            ));
+        }
+    };
+
+    Ok((
+        pinocchio_idl_core::IdlEvent {
+            name: name.clone(),
+            discriminator: pinocchio_idl_core::event_discriminator(&name).to_vec(),
+        },
+        IdlTypeDefinition {
+            name,
+            r#type: IdlType {
+                kind: "struct".to_string(),
+                fields,
+            },
+        },
+    ))
+}
+
 fn errors_from_enum(item: &ItemEnum) -> syn::Result<Vec<IdlError>> {
     let mut errors = Vec::new();
 
@@ -245,13 +288,23 @@ pub fn build_idl(src_dir: &Path, metadata: Metadata) -> anyhow::Result<Idl> {
         })
         .collect::<anyhow::Result<Vec<_>>>()?;
 
-    let (accounts, types): (Vec<_>, Vec<_>) = discovery
+    let (accounts, mut types): (Vec<_>, Vec<_>) = discovery
         .states
         .iter()
         .map(|(s, file)| state_to_idl(s).map_err(|e| format_syn_error(e, file)))
         .collect::<anyhow::Result<Vec<_>>>()?
         .into_iter()
         .unzip();
+
+    let (events, event_types): (Vec<_>, Vec<_>) = discovery
+        .events
+        .iter()
+        .map(|(e, file)| event_to_idl(e).map_err(|err| format_syn_error(err, file)))
+        .collect::<anyhow::Result<Vec<_>>>()?
+        .into_iter()
+        .unzip();
+
+    types.extend(event_types);
 
     let errors: Vec<IdlError> = discovery
         .errors
@@ -276,6 +329,7 @@ pub fn build_idl(src_dir: &Path, metadata: Metadata) -> anyhow::Result<Idl> {
         errors,
         types,
         constants,
+        events,
     })
 }
 

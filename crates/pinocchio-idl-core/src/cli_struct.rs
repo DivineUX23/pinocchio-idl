@@ -10,6 +10,15 @@ pub struct Idl {
     pub errors: Vec<IdlError>,
     pub types: Vec<IdlTypeDefinition>,
     pub constants: Vec<IdlConstant>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub events: Vec<IdlEvent>,
+}
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct IdlEvent {
+    pub name: String,
+    pub discriminator: Vec<u8>,
 }
 
 #[derive(Serialize, Debug)]

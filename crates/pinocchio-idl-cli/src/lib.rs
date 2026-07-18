@@ -1,5 +1,7 @@
 pub mod discover;
+pub mod doctor;
 pub mod idl_build;
+pub mod init_agents;
 pub mod manifest;
 
 pub use discover::{DiscoveredInstruction, Discovery, discover};
@@ -58,6 +60,9 @@ pub(crate) fn visit_items(items: &[Item], discovery: &mut Discovery, file_path: 
             Item::Struct(s) => {
                 if find_attr(&s.attrs, "p_state").is_some() {
                     discovery.states.push((s.clone(), file_path.to_path_buf()));
+                }
+                if find_attr(&s.attrs, "p_event").is_some() {
+                    discovery.events.push((s.clone(), file_path.to_path_buf()));
                 }
             }
             Item::Enum(e) => {
