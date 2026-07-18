@@ -15,7 +15,8 @@ use std::time::Instant;
                   Pinocchio programs.\n\nZero runtime overhead. Full Anchor + Codama compatibility.",
     after_help = "EXAMPLES:\n    \
                   cargo pinocchio-idl generate\n    \
-                  cargo pinocchio-idl generate --manifest-path ./Cargo.toml --out ./target/idl.json"
+                  cargo pinocchio-idl generate --manifest-path ./Cargo.toml --out ./target/idl.json\n    \
+                  cargo pinocchio-idl generate -f codama"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -31,8 +32,10 @@ enum Command {
         manifest_path: PathBuf,
 
         /// Output path for the generated IDL
-        #[arg(long, short = 'o', default_value = "idl.json")]
-        out: PathBuf,
+        //#[arg(long, short = 'o', default_value = "idl.json")]
+        //out: PathBuf,
+        #[arg(long, short = 'o')]
+        out: Option<PathBuf>,
 
         /// Source directory override
         #[arg(long, short = 's')]
@@ -49,8 +52,10 @@ enum Command {
         manifest_path: PathBuf,
 
         /// Output path for the existing IDL to compare against
-        #[arg(long, short = 'o', default_value = "idl.json")]
-        out: PathBuf,
+        //#[arg(long, short = 'o', default_value = "idl.json")]
+        //out: PathBuf,
+        #[arg(long, short = 'o')]
+        out: Option<PathBuf>,
 
         /// Source directory override
         #[arg(long, short = 's')]
@@ -126,6 +131,11 @@ fn run(cli: Cli) -> Result<()> {
         } => {
             let start_time = Instant::now();
 
+            let out = out.unwrap_or_else(|| match format {
+                OutputFormat::Codama => PathBuf::from("codama.json"),
+                OutputFormat::Anchor => PathBuf::from("idl.json"),
+            });
+
             let (metadata, lib_path) = read_metadata(&manifest_path)
                 .with_context(|| format!("Failed to read metadata {}", manifest_path.display()))?;
 
@@ -176,6 +186,11 @@ fn run(cli: Cli) -> Result<()> {
 
             let (metadata, lib_path) = read_metadata(&manifest_path)
                 .with_context(|| format!("Failed to read metadata {}", manifest_path.display()))?;
+
+            let out = out.unwrap_or_else(|| match format {
+                OutputFormat::Codama => PathBuf::from("codama.json"),
+                OutputFormat::Anchor => PathBuf::from("idl.json"),
+            });
 
             let src_dir = src.unwrap_or_else(|| {
                 if let Some(p) = lib_path {

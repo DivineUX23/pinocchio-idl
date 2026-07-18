@@ -15,7 +15,8 @@ use std::time::Instant;
                   Zero runtime overhead. Full Anchor + Codama compatibility.",
     after_help = "EXAMPLES:\n    \
                   pinocchio-idl generate\n    \
-                  pinocchio-idl generate --manifest-path ./Cargo.toml --out ./target/idl.json"
+                  pinocchio-idl generate --manifest-path ./Cargo.toml --out ./target/idl.json\n    \
+                  pinocchio-idl generate -f codama"
 )]
 struct Cli {
     #[command(subcommand)]
@@ -31,15 +32,15 @@ enum Command {
         manifest_path: PathBuf,
 
         /// Output path for the generated IDL
-        #[arg(long, short = 'o', default_value = "idl.json")]
-        out: PathBuf,
+        #[arg(long, short = 'o')]
+        out: Option<PathBuf>,
 
         /// Source directory override
         #[arg(long, short = 's')]
         src: Option<PathBuf>,
 
         /// Output format: anchor (default) or codama
-        #[arg(long, short = 'f', default_value = "anchor")]
+        #[arg(long, short = 'f', alias = "f", default_value = "anchor")]
         format: OutputFormat,
     },
     /// Check if the generated IDL matches the existing file
@@ -49,15 +50,15 @@ enum Command {
         manifest_path: PathBuf,
 
         /// Output path for the existing IDL to compare against
-        #[arg(long, short = 'o', default_value = "idl.json")]
-        out: PathBuf,
+        #[arg(long, short = 'o')]
+        out: Option<PathBuf>,
 
         /// Source directory override
         #[arg(long, short = 's')]
         src: Option<PathBuf>,
 
         /// Output format: anchor (default) or codama
-        #[arg(long, short = 'f', default_value = "anchor")]
+        #[arg(long, short = 'f', alias = "f", default_value = "anchor")]
         format: OutputFormat,
     },
     /// Scan the codebase for missing or duplicate IDL annotations
@@ -139,6 +140,11 @@ fn run(cli: Cli) -> Result<()> {
         } => {
             let start_time = Instant::now();
 
+            let out = out.unwrap_or_else(|| match format {
+                OutputFormat::Codama => PathBuf::from("codama.json"),
+                OutputFormat::Anchor => PathBuf::from("idl.json"),
+            });
+
             let (metadata, lib_path) = read_metadata(&manifest_path)
                 .with_context(|| format!("Failed to read metadata {}", manifest_path.display()))?;
 
@@ -184,6 +190,11 @@ fn run(cli: Cli) -> Result<()> {
             format,
         } => {
             let start_time = Instant::now();
+
+            let out = out.unwrap_or_else(|| match format {
+                OutputFormat::Codama => PathBuf::from("codama.json"),
+                OutputFormat::Anchor => PathBuf::from("idl.json"),
+            });
 
             let (metadata, lib_path) = read_metadata(&manifest_path)
                 .with_context(|| format!("Failed to read metadata {}", manifest_path.display()))?;

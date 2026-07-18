@@ -22,7 +22,8 @@
   - [1. Adding the Macro Dependency](#1-adding-the-macro-dependency)
   - [2. Annotating Your Program](#2-annotating-your-program)
   - [3. Generating the IDL](#3-generating-the-idl)
-  - [4. GitHub Actions CI](#4-github-actions-ci)
+  - [4. Generate Codama](#4-generate-codama)
+  - [5. GitHub Actions CI](#5-github-actions-ci)
 - [Migration from Anchor](#migration-from-anchor)
 - [Example: Escrow Program](#example-escrow-program)
 - [How It Works](#how-it-works)
@@ -124,7 +125,8 @@ The output `idl.json` is Anchor-compatible and directly consumable by [Codama](h
 
 Or generate native Codama format:
 ```bash
-cargo pinocchio-idl generate --format codama --out codama.json
+cargo pinocchio-idl generate --format codama
+# -> codama.json written to the current directory
 ```
 
 ---
@@ -415,7 +417,19 @@ The output is a valid Anchor-compatible IDL and is directly consumable by [Codam
 
 ---
 
-### 4. GitHub Actions CI
+### 4. Generate Codama
+
+If you want to generate a native Codama JSON payload natively:
+
+```bash
+cargo pinocchio-idl generate --format codama
+# Or using the short alias
+cargo pinocchio-idl generate -f codama
+```
+
+---
+
+### 5. GitHub Actions CI
 
 Automate IDL generation in your CI pipeline to ensure your IDL stays in sync with your program source. Add this to your `.github/workflows/main.yml`:
 
