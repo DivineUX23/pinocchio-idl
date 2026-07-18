@@ -42,7 +42,7 @@ enum Command {
         src: Option<PathBuf>,
 
         /// Output format: anchor (default) or codama
-        #[arg(long, short = 'f', default_value = "anchor")]
+        #[arg(long, short = 'f', alias = "f", default_value = "anchor")]
         format: OutputFormat,
     },
     /// Check if the generated IDL matches the existing file
@@ -62,7 +62,7 @@ enum Command {
         src: Option<PathBuf>,
 
         /// Output format: anchor (default) or codama
-        #[arg(long, short = 'f', default_value = "anchor")]
+        #[arg(long, short = 'f', alias = "f", default_value = "anchor")]
         format: OutputFormat,
     },
     /// Scan the codebase for missing or duplicate IDL annotations
