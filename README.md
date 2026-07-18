@@ -87,16 +87,11 @@ pinocchio-idl-macros = "0.1.0"
 
 ### Step 3 - Annotate and generate
 
-Our macros actively generate `DISCRIMINATOR` constants while remaining completely transparent to your runtime logic.
 
 ```rust
 use pinocchio_idl_macros::{p_instruction, p_state};
 
-// #[p_state(inject)] automatically creates: 
-// pub const DISCRIMINATOR: [u8; 8] = ...; 
-// pub const SPACE: usize = 8;
-// If you omit `inject`, it purely generates the IDL with no code injection.
-#[p_state(inject)]
+#[p_state]
 pub struct Counter {
     pub count: u64,
 }
@@ -107,9 +102,12 @@ pub struct Counter {
         payer(signer, mut),
         counter(mut, state = Counter),
         system_program
+    ],
+    data = [
+        action:    u8  = data[0]
     ]
 )]
-pub fn process_increment(accounts: &mut [AccountView], _data: &[u8]) -> ProgramResult {
+pub fn process_increment(accounts: &mut [AccountView], data: &[u8]) -> ProgramResult {
     // Write your raw pinocchio logic here!
     Ok(())
 }
