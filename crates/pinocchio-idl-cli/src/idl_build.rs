@@ -75,7 +75,9 @@ fn state_to_idl(item: &ItemStruct) -> syn::Result<(IdlAccountDef, IdlTypeDefinit
     ))
 }
 
-fn event_to_idl(item: &ItemStruct) -> syn::Result<(pinocchio_idl_core::IdlEvent, IdlTypeDefinition)> {
+fn event_to_idl(
+    item: &ItemStruct,
+) -> syn::Result<(pinocchio_idl_core::IdlEvent, IdlTypeDefinition)> {
     let name = item.ident.to_string();
 
     let fields = match &item.fields {

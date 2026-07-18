@@ -1,6 +1,6 @@
+use anyhow::{Context, Result, bail};
 use std::fs;
 use std::path::Path;
-use anyhow::{bail, Context, Result};
 
 const AGENTS_MD: &str = r#"# Pinocchio IDL Annotation Instructions
 
@@ -38,14 +38,20 @@ pub fn run_init_agents(dir: &Path, force: bool) -> Result<()> {
 
     let agents_path = agents_dir.join("AGENTS.md");
     if agents_path.exists() && !force {
-        println!("{} already exists. Run with --force to overwrite.", agents_path.display());
+        println!(
+            "{} already exists. Run with --force to overwrite.",
+            agents_path.display()
+        );
         return Ok(());
     }
 
     fs::write(&agents_path, AGENTS_MD)
         .with_context(|| format!("failed to write {}", agents_path.display()))?;
 
-    println!("✅ Successfully wrote AI agent instructions to {}", agents_path.display());
+    println!(
+        "✅ Successfully wrote AI agent instructions to {}",
+        agents_path.display()
+    );
     println!("Ask your AI coding assistant to follow these rules when working on the codebase.");
 
     Ok(())

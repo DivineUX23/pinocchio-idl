@@ -247,6 +247,22 @@
           }
         ]
       }
+    },
+    {
+      "name": "EscrowCreated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "maker",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          }
+        ]
+      }
     }
   ],
   "constants": [
@@ -259,6 +275,21 @@
       "name": "ESCROW_VERSION",
       "type": "u8",
       "value": "1"
+    }
+  ],
+  "events": [
+    {
+      "name": "EscrowCreated",
+      "discriminator": [
+        70,
+        127,
+        105,
+        102,
+        92,
+        97,
+        7,
+        173
+      ]
     }
   ]
 }
