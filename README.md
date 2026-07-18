@@ -5,7 +5,7 @@
 [![CI](https://github.com/DivineUX23/pinocchio-idl/actions/workflows/ci.yml/badge.svg)](https://github.com/DivineUX23/pinocchio-idl/actions/workflows/ci.yml)
 [![Rust: 1.89+](https://img.shields.io/badge/rust-1.89%2B-orange)](https://www.rust-lang.org)
 
-> **The ultimate Solana Pinocchio IDL generator for generating Anchor and Codama compatible IDLs.**
+> **The ultimate Solana Pinocchio IDL generator for generating reproducible Anchor and Codama compatible IDLs.**
 > Write Solana programs with Pinocchio's raw performance and Anchor's developer experience. `pinocchio-idl` uses **active macros** to automatically generate `DISCRIMINATOR` arrays, `SPACE` constants, and 100% Codama-compatible IDLs with zero runtime framework bloat. 
 
 ---
@@ -35,28 +35,17 @@
 
 ## What it does
 
-Solana developers need an IDL (Interface Definition Language) file so that client tools—TypeScript SDKs, explorers, and Codama code generators—know how to talk to their programs. Anchor programs get this for free. Pinocchio programs, which deliberately avoid Anchor to stay lean and fast, need a dedicated IDL generator.
+Solana developers need an IDL (Interface Definition Language) file so that client toolsTypeScript SDKs, explorers, and Codama code generatorsknow how to talk to their programs. Anchor programs get this for free. Pinocchio programs, which deliberately avoid Anchor to stay lean and fast, need a dedicated IDL generator.
 
-`pinocchio-idl` is the most powerful tool for this job. You annotate your existing Pinocchio code with a small set of macros, run one CLI command, and get a fully structured `idl.json` that is 100% compatible with the [Anchor IDL specification](https://www.anchor-lang.com/) and [Codama](https://github.com/codama-idl/codama).
+`pinocchio-idl` is the most powerful tool for this job. You annotate your existing Pinocchio code with a small set of macros, run one CLI command, and get a fully structured and reproducible `idl.json` that is 100% compatible with the [Anchor IDL specification](https://www.anchor-lang.com/) and [Codama](https://github.com/codama-idl/codama).
 
 **Annotate with macros -> run the CLI -> get `idl.json` or `codama.json`.**
 
-Unlike passive parsers, our macros are **active**. They don't just generate JSON—they optionally implement `pub const DISCRIMINATOR` and `pub const SPACE` for your accounts. By flipping a simple `inject` flag, they can even actively inject runtime validation guards (PDA derivation, bounds checking, signer checks) directly into your functions at compile-time. This ensures absolute **reproducibility** of your interface behavior, making sure your Rust source code and your IDL are deterministically aligned.
+Unlike passive parsers, our macros are **active**. They don't just generate JSONthey optionally implement `pub const DISCRIMINATOR` and `pub const SPACE` for your accounts. By flipping a simple `inject` flag, they can even actively inject runtime validation guards (PDA derivation, bounds checking, signer checks) directly into your functions at compile-time. This ensures absolute **reproducibility** of your interface behavior, making sure your Rust source code and your IDL are deterministically aligned.
 
 ---
 
 ## Why pinocchio-idl?
-
-If you are evaluating Pinocchio IDL generators, here is why `pinocchio-idl` is a powerful choice for your workflow:
-
-1. **Dual Formats (Anchor & Codama):** We natively support generating standard Anchor JSON *and* native Codama JSON (complete with `eventNode` and `pdaLinkNode` serialization). Run `cargo pinocchio-idl generate --format codama` to get the perfect Codama schema instantly, guaranteeing **compatibility** with any modern Solana client generator (like Kinobi).
-2. **Inline Declarations:** No need to split your Accounts and Arguments into separate boilerplate structs. Declare everything cleanly and inline on your handler function.
-3. **Active Macros (No more Boilerplate):** Other tools use "passive" macros that do nothing but tag AST nodes. Our macros (`#[p_state(inject)]`, `#[p_event(inject)]`) are *active*. We automatically calculate and inject the standard 8-byte SHA-256 `DISCRIMINATOR` and byte `SPACE` constants into your structs at compile-time. Say goodbye to manually typing `pub const DISCRIMINATOR: [u8; 8] = [...]`.
-4. **Optional Security Injection:** Need to validate a complex PDA? Just use `#[p_instruction(inject)]` and our macro will automatically inject the `find_program_address` validation logic directly into your function body. Zero runtime framework bloat, 100% security.
-5. **Team Workflow Support & AI Ready:** We include a built-in `init-agents` command that natively sets up your repository for AI coding assistants (like Cursor, Copilot, or Claude) by generating custom `.agents/AGENTS.md` and `.agents/skills.json` rule files automatically. Combined with our strict CI validation (`cargo pinocchio-idl check`), this delivers unparalleled **team workflow support** for rapidly scaling engineering teams.
-
-
----
 
 If you are migrating from Anchor or evaluating alternatives, here is what you gain:
 
@@ -144,14 +133,13 @@ cargo pinocchio-idl generate --format codama --out codama.json
 
 ## Features
 
-- **Optional Active State & Event Generation.** `#[p_state(inject)]` and `#[p_event(inject)]` actively derive a compile-time `SPACE` constant and an Anchor-compatible 8-byte `DISCRIMINATOR` (SHA-256 of `"account:<StructName>"` or `"event:<StructName>"`) for any named-field struct. No manual boilerplate required. Without `inject`, they purely generate IDL definitions safely.
-- **Optional Compile-time validation injection.** Want PDA validation? Add the `inject` flag to `#[p_instruction(inject, ...)]`. It rewrites the handler at compile time to prepend bounds checking, signer/writable guards, and PDA verification. No runtime framework, no trait vtables.
-- **`#[p_instruction(...)]`.** A declarative attribute DSL for specifying accounts and instruction data fields (byte-slice extraction) strictly inline, avoiding the need for multiple separate context structs.
-- **Anchor and Codama compatible output.** The generated `idl.json` satisfies the Anchor IDL specification and our `--format codama` output produces native Codama definitions directly consumable by the [Codama](https://github.com/codama-idl/codama) generation suite, assuring deep **compatibility** across the Solana SDK ecosystem.
-- **AI Agent Tooling & Team Workflow Support.** Run `cargo pinocchio-idl init-agents` to automatically configure your repository's `.agents/` folder with custom instructions for AI assistants. Built to support robust CI/CD pipelines, IDL generation is fully deterministic and ensures high **reproducibility** across developer environments.
-- **No framework dependencies.** Programs using `pinocchio-idl` remain exactly as lean as a hand-written Pinocchio program.
-- **Well-known program resolution.** Accounts using reserved names (`system_program`, `token_program`, etc.) are automatically mapped to their canonical on-chain addresses in the generated IDL.
-- **Zero runtime overhead.** All macro expansion occurs at Rust compile time. The CLI is a pure static-analysis tool and does not invoke the Rust compiler.
+1. **Dual Formats (Anchor & Codama):** We natively support generating standard Anchor JSON and native Codama JSON. Run `cargo pinocchio-idl generate --format codama` to get the Codama schema instantly, guaranteeing **reproducibility** and **compatibility** across the Solana SDK ecosystem.
+2. **Inline Declarations:** No need to split your Accounts and Arguments into separate boilerplate structs. `#[p_instruction(...)]` is a declarative attribute DSL that lets you specify accounts and instruction data (byte slice extraction) strictly inline on your handler function.
+3. **Active Macros, Not Passive Tags:** Other tools use "passive" macros that just tag AST nodes for later reflection. Ours are active: `#[p_state(inject)]` and `#[p_event(inject)]` derive a compile-time SPACE constant and an Anchor-compatible 8-byte DISCRIMINATOR, computed as the SHA-256 of `account:<StructName>` or `event:<StructName>`, for any named-field struct. Say goodbye to manually typing `pub const DISCRIMINATOR: [u8; 8] = [...].` Without `inject`, both attributes fall back to pure IDL generation with no code injected.
+4. **Optional Security Injection:** Need to validate a PDA? Add `inject` to `#[p_instruction(inject, ...)]` and the macro updates your handler at compile time to prepend bounds checking, signer/writable guards, and PDA verification using `create_program_address`, so you get the security guarantee without paying for a bump search. No runtime framework, no trait vtables, just inlined checks.
+5. **Team Workflow Support and AI Ready:** `cargo pinocchio-idl init-agents` sets up your repo's `.agents/AGENTS.md` rule with custom instructions for AI coding assistants. IDL generation itself is fully deterministic, giving you high reproducibility across developer environments and CI.
+6. **Zero Runtime Overhead, Zero Framework Weight:** All macro expansion happens at Rust compile time, so programs using `pinocchio-idl` stay exactly as lean as a hand-written Pinocchio program. The CLI itself is a pure static-analysis tool built on `syn`; it never invokes `rustc`, which keeps it fast in CI.
+7. **Well-known Program Resolution:** Accounts using reserved names (system_program, token_program, etc.) are automatically mapped to their canonical on-chain addresses in the generated IDL.
 
 ---
 
@@ -784,7 +772,7 @@ Use range-based extraction as the default:
 data = [
     seed:    u64 = data[0..8],
     receive: u64 = data[8..16],
-    bump:    u8  = data[16..17]  // preferred over data[16]
+    bump:    u8  = data[16]
 ]
 ```
 
