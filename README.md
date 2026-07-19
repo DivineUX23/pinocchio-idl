@@ -83,7 +83,7 @@ cargo pinocchio-idl --version
 ```toml
 # Cargo.toml
 [dependencies]
-pinocchio-idl-macros = "0.1.0"
+pinocchio-idl-macros = "0.1.1"
 ```
 
 ### Step 3 - Annotate and generate
@@ -204,7 +204,7 @@ Add `pinocchio-idl-macros` to the program's `Cargo.toml`:
 
 ```toml
 [dependencies]
-pinocchio-idl-macros = "0.1.0"
+pinocchio-idl-macros = "0.1.1"
 ```
 
 ---

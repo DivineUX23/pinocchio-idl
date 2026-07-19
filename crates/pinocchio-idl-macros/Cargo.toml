@@ -13,7 +13,7 @@ proc-macro = true
 
 [dependencies]
 pinocchio = "0.11.2"
-pinocchio-idl-core = { version = "0.1.0", path = "../pinocchio-idl-core" }
+pinocchio-idl-core = { version = "0.1.1", path = "../pinocchio-idl-core" }
 proc-macro2 = { workspace = true }
 quote = { workspace = true }
 syn = { workspace = true }
