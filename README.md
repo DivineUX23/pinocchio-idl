@@ -92,11 +92,13 @@ pinocchio-idl-macros = "0.1.0"
 ```rust
 use pinocchio_idl_macros::{p_instruction, p_state};
 
+// Annotate your states with the p_state macro
 #[p_state]
 pub struct Counter {
     pub count: u64,
 }
 
+// Annotate your instructions with the p_instruction macro
 #[p_instruction(
     id = 0,
     accounts = [
@@ -719,7 +721,6 @@ vault(mut, ata = [owner])
 vault(mut, ata = [owner, mint_a, extra])
 ```
 
-Note that the CLI's static IDL generation does not independently validate the length of `ata` lists. A malformed `ata` annotation may not be caught until the proc-macro expands during compilation.
 
 ---
 
