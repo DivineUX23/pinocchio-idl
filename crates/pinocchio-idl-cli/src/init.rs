@@ -59,7 +59,7 @@ crate-type = ["cdylib", "lib"]
 pinocchio = "0.11"
 pinocchio-pubkey = "0.3"
 pinocchio-system = "0.6"
-pinocchio-idl-macros = "0.1.1"
+pinocchio-idl-macros = "0.1.2"
 
 [features]
 default = []
