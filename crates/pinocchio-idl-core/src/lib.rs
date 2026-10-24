@@ -135,6 +135,15 @@ impl Instruction {
     }
 
     pub fn into_idl(&self, name: String, index: u8) -> syn::Result<IdlInstruction> {
+        self.into_idl_with_docs(name, index, None)
+    }
+
+    pub fn into_idl_with_docs(
+        &self,
+        name: String,
+        index: u8,
+        docs: Option<Vec<String>>,
+    ) -> syn::Result<IdlInstruction> {
         let account_names: Vec<String> = self.accounts.iter().map(|a| a.name.to_string()).collect();
 
         let arg_names: Vec<String> = self
@@ -162,6 +171,7 @@ impl Instruction {
 
         Ok(IdlInstruction {
             name,
+            docs,
             discriminator: vec![self.id.unwrap_or(index)],
             accounts,
             args,
@@ -169,11 +179,12 @@ impl Instruction {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Account {
     pub name: Ident,
     pub is_signer: bool,
     pub is_mut: bool,
+    pub is_optional: bool,
     pub pda: Option<Seed>,
     pub ata: Option<Ata>,
     pub init: Option<Ata>,
@@ -188,6 +199,7 @@ impl Parse for Account {
 
         let mut is_signer = false;
         let mut is_mut = false;
+        let mut is_optional = false;
         let mut pda = None;
         let mut ata = None;
         let mut init = None;
@@ -213,6 +225,8 @@ impl Parse for Account {
 
                 if ident == "signer" {
                     is_signer = true;
+                } else if ident == "optional" {
+                    is_optional = true;
                 } else if ident == "pda" {
                     content.parse::<Token![=]>()?;
                     let seeds: Seed = content.parse()?;
@@ -246,7 +260,7 @@ impl Parse for Account {
                     return Err(syn::Error::new(
                         ident.span(),
                         format!(
-                            "unknown account constraint `{}`, accepted constraint are - `signer`, `mut`, `pda`, `ata`, `init`, `state`, `address`, `relations`",
+                            "unknown account constraint `{}`, accepted constraint are - `signer`, `mut`, `optional`, `pda`, `ata`, `init`, `state`, `address`, `relations`",
                             ident
                         ),
                     ));
@@ -310,6 +324,7 @@ impl Parse for Account {
             name,
             is_signer,
             is_mut,
+            is_optional,
             pda,
             ata,
             init,
@@ -326,6 +341,7 @@ impl Account {
             name,
             is_signer: false,
             is_mut: false,
+            is_optional: false,
             pda: None,
             ata: None,
             init: None,
@@ -377,6 +393,8 @@ impl Account {
             name: idl_name,
             writable: self.is_mut,
             signer: self.is_signer,
+            optional: self.is_optional,
+            docs: None,
             address: address_val,
             relations: (!self.relations.is_empty())
                 .then(|| self.relations.iter().map(|r| r.to_string()).collect()),

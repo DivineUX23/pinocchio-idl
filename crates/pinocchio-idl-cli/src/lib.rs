@@ -1,11 +1,18 @@
+pub mod client;
+pub mod commands;
 pub mod discover;
 pub mod doctor;
 pub mod idl_build;
+pub mod init;
 pub mod init_agents;
 pub mod manifest;
 
+pub use client::{ClientOptions, run_client};
+pub use commands::{Cli, Command, OutputFormat, run as run_cli};
 pub use discover::{DiscoveredInstruction, Discovery, discover};
 pub use idl_build::{build_idl, write_idl};
+pub use init::run_init;
+pub use init_agents::run_init_agents;
 pub use manifest::read_metadata;
 
 use std::path::{Path, PathBuf};
@@ -64,10 +71,20 @@ pub(crate) fn visit_items(items: &[Item], discovery: &mut Discovery, file_path: 
                 if find_attr(&s.attrs, "p_event").is_some() {
                     discovery.events.push((s.clone(), file_path.to_path_buf()));
                 }
+                if find_attr(&s.attrs, "p_type").is_some() {
+                    discovery
+                        .types
+                        .push((Item::Struct(s.clone()), file_path.to_path_buf()));
+                }
             }
             Item::Enum(e) => {
                 if find_attr(&e.attrs, "p_error").is_some() {
                     discovery.errors.push((e.clone(), file_path.to_path_buf()));
+                }
+                if find_attr(&e.attrs, "p_type").is_some() {
+                    discovery
+                        .types
+                        .push((Item::Enum(e.clone()), file_path.to_path_buf()));
                 }
             }
             Item::Const(c) => {

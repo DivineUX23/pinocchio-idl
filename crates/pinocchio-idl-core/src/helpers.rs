@@ -130,6 +130,58 @@ pub fn event_discriminator(struct_name: &str) -> [u8; 8] {
     Sha256::digest(preimage.as_bytes())[..8].try_into().unwrap()
 }
 
+pub fn extract_docs(attrs: &[syn::Attribute]) -> Option<Vec<String>> {
+    let docs: Vec<String> = attrs
+        .iter()
+        .filter_map(|attr| {
+            if !attr.path().is_ident("doc") {
+                return None;
+            }
+            let nv = attr.meta.require_name_value().ok()?;
+            if let syn::Expr::Lit(syn::ExprLit {
+                lit: syn::Lit::Str(s),
+                ..
+            }) = &nv.value
+            {
+                let trimmed = s.value().trim().to_string();
+                if !trimmed.is_empty() {
+                    return Some(trimmed);
+                }
+            }
+            None
+        })
+        .collect();
+
+    if docs.is_empty() { None } else { Some(docs) }
+}
+
+pub fn is_primitive_type(name: &str) -> bool {
+    matches!(
+        name,
+        "bool"
+            | "u8"
+            | "u16"
+            | "u32"
+            | "u64"
+            | "u128"
+            | "u256"
+            | "i8"
+            | "i16"
+            | "i32"
+            | "i64"
+            | "i128"
+            | "f32"
+            | "f64"
+            | "string"
+            | "String"
+            | "str"
+            | "Pubkey"
+            | "Address"
+            | "pubkey"
+            | "bytes"
+    )
+}
+
 pub fn derive_instruction_name(ident: &Ident) -> String {
     ident.to_string()
 }
@@ -160,7 +212,9 @@ pub fn rust_to_idl(ty: &Type) -> syn::Result<FieldType> {
 
             Ok(match ident.as_str() {
                 "Pubkey" | "Address" => FieldType::Simple("pubkey".to_string()),
-                other => FieldType::Simple(other.to_string()),
+                "String" | "str" => FieldType::Simple("string".to_string()),
+                s if is_primitive_type(s) => FieldType::Simple(s.to_string()),
+                custom => FieldType::Defined(custom.to_string()),
             })
         }
 
@@ -385,7 +439,9 @@ pub fn account_binding(stmts: &[Stmt], accounts_param: &str) -> Vec<Ident> {
                         //let binding = slice.elems.iter().filter(|p| !matches!(p, Pat::Rest(_))).collect();
                         for p in slice.elems.iter() {
                             if let Pat::Ident(pat_ident) = p {
-                                binding.push(pat_ident.ident.clone());
+                                if pat_ident.subpat.is_none() {
+                                    binding.push(pat_ident.ident.clone());
+                                }
                             }
                         }
                     }

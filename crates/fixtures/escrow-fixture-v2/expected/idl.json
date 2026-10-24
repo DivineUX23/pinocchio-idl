@@ -1,0 +1,428 @@
+{
+  "address": "4Nd1mBQtrMJVYVfKf2PJy9NZPdUZmG3nP99rr4rUP3Fi",
+  "metadata": {
+    "name": "escrow-fixture-v2",
+    "version": "0.0.0",
+    "spec": "0.1.0",
+    "description": "Created with Pinocchio-IDL"
+  },
+  "instructions": [
+    {
+      "name": "process_make_instruction",
+      "docs": [
+        "Initialize a new escrow offer, deposit Token A into the vault, and set terms.",
+        "Supports an optional `referrer` account for affiliate fee sharing."
+      ],
+      "discriminator": [
+        0
+      ],
+      "accounts": [
+        {
+          "name": "maker",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "escrow"
+              },
+              {
+                "kind": "account",
+                "path": "mint_a"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "mint_a"
+        },
+        {
+          "name": "mint_b"
+        },
+        {
+          "name": "escrow",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint_b"
+              },
+              {
+                "kind": "arg",
+                "path": "seed"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                6,
+                221,
+                246,
+                225,
+                215,
+                101,
+                161,
+                147,
+                217,
+                203,
+                225,
+                70,
+                206,
+                235,
+                121,
+                172,
+                28,
+                180,
+                133,
+                237,
+                95,
+                91,
+                55,
+                145,
+                58,
+                140,
+                245,
+                133,
+                126,
+                255,
+                0,
+                169
+              ]
+            }
+          },
+          "state": "Escrow"
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "referrer",
+          "optional": true
+        }
+      ],
+      "args": [
+        {
+          "name": "seed",
+          "type": "u64"
+        },
+        {
+          "name": "receive",
+          "type": "u64"
+        },
+        {
+          "name": "bump",
+          "type": "u8"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "Escrow",
+      "docs": [
+        "On-chain state tracking an escrow offer between a maker and prospective taker."
+      ],
+      "discriminator": [
+        31,
+        213,
+        123,
+        187,
+        186,
+        22,
+        218,
+        155
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "AlreadyTaken",
+      "msg": "The escrow offer has already been accepted and fulfilled by another taker."
+    },
+    {
+      "code": 6001,
+      "name": "ZeroAmount",
+      "msg": "Requested exchange amount cannot be zero."
+    },
+    {
+      "code": 100,
+      "name": "InvalidMint",
+      "msg": "Invalid token mint provided for swap; does not match escrow terms."
+    },
+    {
+      "code": 6003,
+      "name": "Expired",
+      "msg": "Escrow offer has expired past MAX_ESCROW_DURATION."
+    },
+    {
+      "code": 6004,
+      "name": "InvalidReferrer",
+      "msg": "Referral account was specified but is invalid or not writable."
+    }
+  ],
+  "types": [
+    {
+      "name": "Escrow",
+      "docs": [
+        "On-chain state tracking an escrow offer between a maker and prospective taker."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "seed",
+            "docs": [
+              "Unique user-provided seed for deriving the escrow PDA address."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "maker",
+            "docs": [
+              "Public key of the maker who initiated and funded the escrow."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "mint_a",
+            "docs": [
+              "Mint address of the tokens deposited into the escrow vault (Token A)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "mint_b",
+            "docs": [
+              "Mint address of the tokens expected in exchange from the taker (Token B)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "receive",
+            "docs": [
+              "Required amount of Token B to complete the exchange."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "docs": [
+              "Canonical bump seed for the escrow PDA."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "status",
+            "docs": [
+              "Current lifecycle status of this escrow."
+            ],
+            "type": {
+              "defined": {
+                "name": "EscrowStatus"
+              }
+            }
+          },
+          {
+            "name": "fee_config",
+            "docs": [
+              "Fee parameters governing protocol fees and optional referral splits."
+            ],
+            "type": {
+              "defined": {
+                "name": "FeeConfig"
+              }
+            }
+          },
+          {
+            "name": "authority",
+            "docs": [
+              "Optional authority allowed to cancel or dispute this escrow."
+            ],
+            "type": {
+              "option": "pubkey"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "EscrowCreated",
+      "docs": [
+        "Event emitted when a new escrow offer is successfully created and funded."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "maker",
+            "docs": [
+              "Public key of the escrow maker."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "docs": [
+              "Amount of Token B required to take the escrow."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "referral_bps",
+            "docs": [
+              "Referral reward in basis points allocated to referrer (if any)."
+            ],
+            "type": "u16"
+          }
+        ]
+      }
+    },
+    {
+      "name": "EscrowStatus",
+      "docs": [
+        "Lifecycle status of an on-chain escrow account."
+      ],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Pending",
+            "docs": [
+              "Escrow has been created, vault is funded, waiting for a taker."
+            ]
+          },
+          {
+            "name": "Completed",
+            "docs": [
+              "Escrow swap was successfully executed and completed."
+            ]
+          },
+          {
+            "name": "Cancelled",
+            "docs": [
+              "Escrow was cancelled by maker and remaining funds refunded."
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "FeeConfig",
+      "docs": [
+        "Fee and reward configuration applied to the escrow trade."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "maker_fee_bps",
+            "docs": [
+              "Protocol fee in basis points (1 bps = 0.01%)."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "referral_bps",
+            "docs": [
+              "Referral reward in basis points allocated to the optional referrer."
+            ],
+            "type": "u16"
+          }
+        ]
+      }
+    }
+  ],
+  "constants": [
+    {
+      "name": "MAX_ESCROW_DURATION",
+      "docs": [
+        "Maximum duration an escrow offer remains valid before expiring (30 days in seconds)."
+      ],
+      "type": "u64",
+      "value": "60 * 60 * 24 * 30"
+    },
+    {
+      "name": "ESCROW_VERSION",
+      "docs": [
+        "Current protocol schema version for escrow state accounts."
+      ],
+      "type": "u8",
+      "value": "2"
+    }
+  ],
+  "events": [
+    {
+      "name": "EscrowCreated",
+      "discriminator": [
+        70,
+        127,
+        105,
+        102,
+        92,
+        97,
+        7,
+        173
+      ]
+    }
+  ]
+}

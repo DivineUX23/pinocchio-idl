@@ -59,3 +59,41 @@ fn builds_idl_from_fixture() {
     assert_eq!(idl.accounts[0].discriminator.len(), 8);
     assert_eq!(idl.types[0].r#type.fields.len(), 7);
 }
+
+fn fixture_v2_src_dir() -> std::path::PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../fixtures/escrow-fixture-v2/src")
+}
+
+#[test]
+fn builds_idl_from_fixture_v2() {
+    let metadata = Metadata {
+        name: "escrow-fixture-v2".to_string(),
+        version: "0.0.0".to_string(),
+        spec: "0.1.0".to_string(),
+        description: "fixture-v2".to_string(),
+    };
+    let idl =
+        build_idl(&fixture_v2_src_dir(), metadata).expect("fixture v2 should produce a valid Idl");
+
+    assert_eq!(idl.address, "4Nd1mBQtrMJVYVfKf2PJy9NZPdUZmG3nP99rr4rUP3Fi");
+    assert_eq!(idl.instructions.len(), 1);
+
+    let make = &idl.instructions[0];
+    assert_eq!(make.accounts.len(), 8);
+
+    let referrer = make.accounts.iter().find(|a| a.name == "referrer").unwrap();
+    assert!(referrer.optional);
+    assert!(make.docs.is_some());
+
+    // Custom types
+    let status_type = idl.types.iter().find(|t| t.name == "EscrowStatus").unwrap();
+    assert_eq!(status_type.r#type.kind, "enum");
+    assert_eq!(status_type.r#type.variants.len(), 3);
+
+    let fee_type = idl.types.iter().find(|t| t.name == "FeeConfig").unwrap();
+    assert_eq!(fee_type.r#type.kind, "struct");
+    assert_eq!(fee_type.r#type.fields.len(), 2);
+
+    let escrow_type = idl.types.iter().find(|t| t.name == "Escrow").unwrap();
+    assert_eq!(escrow_type.r#type.fields.len(), 9);
+}

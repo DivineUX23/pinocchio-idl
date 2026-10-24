@@ -115,6 +115,81 @@ jobs:
             crates/fixtures/escrow-fixture/expected/idl.actual.json \
             || (echo "IDL output has changed. Run the generator locally and commit the updated snapshot." && exit 1)
 
+      - name: Regenerate escrow-fixture-v2 IDL (Anchor)
+        run: |
+          ./target/debug/pinocchio-idl generate \
+            --manifest-path crates/fixtures/escrow-fixture-v2/Cargo.toml \
+            --out crates/fixtures/escrow-fixture-v2/expected/idl.actual.json
+
+      - name: Diff against committed escrow-fixture-v2 Anchor snapshot
+        run: |
+          diff \
+            crates/fixtures/escrow-fixture-v2/expected/idl.json \
+            crates/fixtures/escrow-fixture-v2/expected/idl.actual.json \
+            || (echo "escrow-fixture-v2 Anchor IDL output has changed. Run the generator locally and commit the updated snapshot." && exit 1)
+
+      - name: Regenerate escrow-fixture-v2 IDL (Codama)
+        run: |
+          ./target/debug/pinocchio-idl generate \
+            --manifest-path crates/fixtures/escrow-fixture-v2/Cargo.toml \
+            --format codama \
+            --out crates/fixtures/escrow-fixture-v2/expected/codama.actual.json
+
+      - name: Diff against committed escrow-fixture-v2 Codama snapshot
+        run: |
+          diff \
+            crates/fixtures/escrow-fixture-v2/expected/codama.json \
+            crates/fixtures/escrow-fixture-v2/expected/codama.actual.json \
+            || (echo "escrow-fixture-v2 Codama IDL output has changed. Run the generator locally and commit the updated snapshot." && exit 1)
+
+      - name: Verify escrow-fixture-v2 with check command
+        run: |
+          ./target/debug/pinocchio-idl check \
+            --manifest-path crates/fixtures/escrow-fixture-v2/Cargo.toml \
+            --out crates/fixtures/escrow-fixture-v2/expected/idl.json
+
+      - name: Run pinocchio-idl doctor on escrow-fixture-v2
+        run: |
+          ./target/debug/pinocchio-idl doctor \
+            --manifest-path crates/fixtures/escrow-fixture-v2/Cargo.toml
+
+      - name: Test pinocchio-idl init (project scaffolding)
+        run: |
+          ./target/debug/pinocchio-idl init ci-sample-app --dir /tmp
+          ./target/debug/pinocchio-idl generate \
+            --manifest-path /tmp/ci-sample-app/Cargo.toml \
+            --out /tmp/ci-sample-app/idl.json
+          test -f /tmp/ci-sample-app/idl.json
+          test -f /tmp/ci-sample-app/.agents/AGENTS.md
+
+      - name: Test pinocchio-idl init-agents (--all targets)
+        run: |
+          ./target/debug/pinocchio-idl init-agents --dir /tmp/ci-sample-app --force --all
+          test -f /tmp/ci-sample-app/.agents/AGENTS.md
+          test -f /tmp/ci-sample-app/CLAUDE.md
+          test -f /tmp/ci-sample-app/.cursor/rules/pinocchio.mdc
+          test -f /tmp/ci-sample-app/.github/copilot-instructions.md
+
+      - name: Test pinocchio-idl client (Codama TS SDK generation)
+        run: |
+          ./target/debug/pinocchio-idl client \
+            --manifest-path crates/fixtures/escrow-fixture-v2/Cargo.toml \
+            --out /tmp/ci-escrow-client \
+            --package-name "@ci/escrow-client" \
+            --script-only
+          test -f /tmp/ci-escrow-client/codama.json
+          test -f /tmp/ci-escrow-client/codama.mjs
+          test -f /tmp/ci-escrow-client/package.json
+          test -f /tmp/ci-escrow-client/tsconfig.json
+
+      - name: Test pinocchio-idl codegen alias (--ts and --no-run)
+        run: |
+          ./target/debug/pinocchio-idl codegen \
+            --manifest-path crates/fixtures/escrow-fixture-v2/Cargo.toml \
+            --ts /tmp/ci-escrow-client-alias \
+            --no-run
+          test -f /tmp/ci-escrow-client-alias/codama.json
+
   macro-expansion:
     name: Macro Expansion Snapshot
     runs-on: ubuntu-latest
@@ -143,3 +218,15 @@ jobs:
             crates/fixtures/escrow-fixture/expected/expanded.rs \
             crates/fixtures/escrow-fixture/expected/expanded.actual.rs \
             || (echo "Macro expansion has changed. Run 'cargo expand --package escrow-fixture --lib > crates/fixtures/escrow-fixture/expected/expanded.rs' locally and commit the updated snapshot." && exit 1)
+
+      - name: Expand escrow-fixture-v2 macros
+        run: |
+          cargo expand --package escrow-fixture-v2 --lib 2>/dev/null \
+            > crates/fixtures/escrow-fixture-v2/expected/expanded.actual.rs
+
+      - name: Diff against committed escrow-fixture-v2 snapshot
+        run: |
+          diff \
+            crates/fixtures/escrow-fixture-v2/expected/expanded.rs \
+            crates/fixtures/escrow-fixture-v2/expected/expanded.actual.rs \
+            || (echo "Macro expansion for escrow-fixture-v2 has changed. Run 'cargo expand --package escrow-fixture-v2 --lib > crates/fixtures/escrow-fixture-v2/expected/expanded.rs' locally and commit the updated snapshot." && exit 1)

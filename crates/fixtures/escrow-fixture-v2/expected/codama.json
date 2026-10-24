@@ -1,0 +1,616 @@
+{
+  "additionalPrograms": [],
+  "events": [
+    {
+      "data": {
+        "fields": [
+          {
+            "defaultValue": {
+              "data": "467f69665c6107ad",
+              "encoding": "base16",
+              "kind": "bytesValueNode"
+            },
+            "defaultValueStrategy": "omitted",
+            "kind": "structFieldTypeNode",
+            "name": "discriminator",
+            "type": {
+              "kind": "fixedSizeTypeNode",
+              "size": 8,
+              "type": {
+                "kind": "bytesTypeNode"
+              }
+            }
+          },
+          {
+            "docs": [
+              "Public key of the escrow maker."
+            ],
+            "kind": "structFieldTypeNode",
+            "name": "maker",
+            "type": {
+              "kind": "publicKeyTypeNode"
+            }
+          },
+          {
+            "docs": [
+              "Amount of Token B required to take the escrow."
+            ],
+            "kind": "structFieldTypeNode",
+            "name": "amount",
+            "type": {
+              "endian": "le",
+              "format": "u64",
+              "kind": "numberTypeNode"
+            }
+          },
+          {
+            "docs": [
+              "Referral reward in basis points allocated to referrer (if any)."
+            ],
+            "kind": "structFieldTypeNode",
+            "name": "referralBps",
+            "type": {
+              "endian": "le",
+              "format": "u16",
+              "kind": "numberTypeNode"
+            }
+          }
+        ],
+        "kind": "structTypeNode"
+      },
+      "discriminators": [
+        {
+          "constant": {
+            "kind": "constantValueNode",
+            "type": {
+              "count": {
+                "kind": "fixedCountNode",
+                "value": 8
+              },
+              "item": {
+                "format": "u8",
+                "kind": "numberTypeNode"
+              },
+              "kind": "arrayTypeNode"
+            },
+            "value": {
+              "items": [
+                {
+                  "kind": "numberValueNode",
+                  "number": 70
+                },
+                {
+                  "kind": "numberValueNode",
+                  "number": 127
+                },
+                {
+                  "kind": "numberValueNode",
+                  "number": 105
+                },
+                {
+                  "kind": "numberValueNode",
+                  "number": 102
+                },
+                {
+                  "kind": "numberValueNode",
+                  "number": 92
+                },
+                {
+                  "kind": "numberValueNode",
+                  "number": 97
+                },
+                {
+                  "kind": "numberValueNode",
+                  "number": 7
+                },
+                {
+                  "kind": "numberValueNode",
+                  "number": 173
+                }
+              ],
+              "kind": "arrayValueNode"
+            }
+          },
+          "kind": "constantDiscriminatorNode",
+          "offset": 0
+        }
+      ],
+      "kind": "eventNode",
+      "name": "escrowCreated"
+    }
+  ],
+  "kind": "rootNode",
+  "program": {
+    "accounts": [
+      {
+        "data": {
+          "fields": [
+            {
+              "defaultValue": {
+                "data": "1fd57bbbba16da9b",
+                "encoding": "base16",
+                "kind": "bytesValueNode"
+              },
+              "defaultValueStrategy": "omitted",
+              "kind": "structFieldTypeNode",
+              "name": "discriminator",
+              "type": {
+                "kind": "fixedSizeTypeNode",
+                "size": 8,
+                "type": {
+                  "kind": "bytesTypeNode"
+                }
+              }
+            },
+            {
+              "docs": [
+                "Unique user-provided seed for deriving the escrow PDA address."
+              ],
+              "kind": "structFieldTypeNode",
+              "name": "seed",
+              "type": {
+                "endian": "le",
+                "format": "u64",
+                "kind": "numberTypeNode"
+              }
+            },
+            {
+              "docs": [
+                "Public key of the maker who initiated and funded the escrow."
+              ],
+              "kind": "structFieldTypeNode",
+              "name": "maker",
+              "type": {
+                "kind": "publicKeyTypeNode"
+              }
+            },
+            {
+              "docs": [
+                "Mint address of the tokens deposited into the escrow vault (Token A)."
+              ],
+              "kind": "structFieldTypeNode",
+              "name": "mintA",
+              "type": {
+                "kind": "publicKeyTypeNode"
+              }
+            },
+            {
+              "docs": [
+                "Mint address of the tokens expected in exchange from the taker (Token B)."
+              ],
+              "kind": "structFieldTypeNode",
+              "name": "mintB",
+              "type": {
+                "kind": "publicKeyTypeNode"
+              }
+            },
+            {
+              "docs": [
+                "Required amount of Token B to complete the exchange."
+              ],
+              "kind": "structFieldTypeNode",
+              "name": "receive",
+              "type": {
+                "endian": "le",
+                "format": "u64",
+                "kind": "numberTypeNode"
+              }
+            },
+            {
+              "docs": [
+                "Canonical bump seed for the escrow PDA."
+              ],
+              "kind": "structFieldTypeNode",
+              "name": "bump",
+              "type": {
+                "endian": "le",
+                "format": "u8",
+                "kind": "numberTypeNode"
+              }
+            },
+            {
+              "docs": [
+                "Current lifecycle status of this escrow."
+              ],
+              "kind": "structFieldTypeNode",
+              "name": "status",
+              "type": {
+                "kind": "definedTypeLinkNode",
+                "name": "escrowStatus"
+              }
+            },
+            {
+              "docs": [
+                "Fee parameters governing protocol fees and optional referral splits."
+              ],
+              "kind": "structFieldTypeNode",
+              "name": "feeConfig",
+              "type": {
+                "kind": "definedTypeLinkNode",
+                "name": "feeConfig"
+              }
+            },
+            {
+              "docs": [
+                "Optional authority allowed to cancel or dispute this escrow."
+              ],
+              "kind": "structFieldTypeNode",
+              "name": "authority",
+              "type": {
+                "item": {
+                  "kind": "publicKeyTypeNode"
+                },
+                "kind": "optionTypeNode",
+                "prefix": {
+                  "endian": "le",
+                  "format": "u8",
+                  "kind": "numberTypeNode"
+                }
+              }
+            }
+          ],
+          "kind": "structTypeNode"
+        },
+        "discriminators": [
+          {
+            "constant": {
+              "kind": "constantValueNode",
+              "type": {
+                "kind": "fixedSizeTypeNode",
+                "size": 8,
+                "type": {
+                  "kind": "bytesTypeNode"
+                }
+              },
+              "value": {
+                "data": "1fd57bbbba16da9b",
+                "encoding": "base16",
+                "kind": "bytesValueNode"
+              }
+            },
+            "kind": "constantDiscriminatorNode",
+            "offset": 0
+          }
+        ],
+        "docs": [
+          "On-chain state tracking an escrow offer between a maker and prospective taker."
+        ],
+        "kind": "accountNode",
+        "name": "escrow"
+      }
+    ],
+    "constants": [
+      {
+        "kind": "constantNode",
+        "name": "maxEscrowDuration",
+        "type": {
+          "endian": "le",
+          "format": "u64",
+          "kind": "numberTypeNode"
+        },
+        "value": {
+          "kind": "numberValueNode",
+          "number": 2592000
+        }
+      },
+      {
+        "kind": "constantNode",
+        "name": "escrowVersion",
+        "type": {
+          "endian": "le",
+          "format": "u8",
+          "kind": "numberTypeNode"
+        },
+        "value": {
+          "kind": "numberValueNode",
+          "number": 2
+        }
+      }
+    ],
+    "definedTypes": [
+      {
+        "docs": [
+          "Lifecycle status of an on-chain escrow account."
+        ],
+        "kind": "definedTypeNode",
+        "name": "escrowStatus",
+        "type": {
+          "kind": "enumTypeNode",
+          "size": {
+            "endian": "le",
+            "format": "u8",
+            "kind": "numberTypeNode"
+          },
+          "variants": [
+            {
+              "docs": [
+                "Escrow has been created, vault is funded, waiting for a taker."
+              ],
+              "kind": "enumEmptyVariantTypeNode",
+              "name": "pending"
+            },
+            {
+              "docs": [
+                "Escrow swap was successfully executed and completed."
+              ],
+              "kind": "enumEmptyVariantTypeNode",
+              "name": "completed"
+            },
+            {
+              "docs": [
+                "Escrow was cancelled by maker and remaining funds refunded."
+              ],
+              "kind": "enumEmptyVariantTypeNode",
+              "name": "cancelled"
+            }
+          ]
+        }
+      },
+      {
+        "docs": [
+          "Fee and reward configuration applied to the escrow trade."
+        ],
+        "kind": "definedTypeNode",
+        "name": "feeConfig",
+        "type": {
+          "fields": [
+            {
+              "docs": [
+                "Protocol fee in basis points (1 bps = 0.01%)."
+              ],
+              "kind": "structFieldTypeNode",
+              "name": "makerFeeBps",
+              "type": {
+                "endian": "le",
+                "format": "u16",
+                "kind": "numberTypeNode"
+              }
+            },
+            {
+              "docs": [
+                "Referral reward in basis points allocated to the optional referrer."
+              ],
+              "kind": "structFieldTypeNode",
+              "name": "referralBps",
+              "type": {
+                "endian": "le",
+                "format": "u16",
+                "kind": "numberTypeNode"
+              }
+            }
+          ],
+          "kind": "structTypeNode"
+        }
+      }
+    ],
+    "errors": [
+      {
+        "code": 6000,
+        "kind": "errorNode",
+        "message": "The escrow offer has already been accepted and fulfilled by another taker.",
+        "name": "alreadyTaken"
+      },
+      {
+        "code": 6001,
+        "kind": "errorNode",
+        "message": "Requested exchange amount cannot be zero.",
+        "name": "zeroAmount"
+      },
+      {
+        "code": 100,
+        "kind": "errorNode",
+        "message": "Invalid token mint provided for swap; does not match escrow terms.",
+        "name": "invalidMint"
+      },
+      {
+        "code": 6003,
+        "kind": "errorNode",
+        "message": "Escrow offer has expired past MAX_ESCROW_DURATION.",
+        "name": "expired"
+      },
+      {
+        "code": 6004,
+        "kind": "errorNode",
+        "message": "Referral account was specified but is invalid or not writable.",
+        "name": "invalidReferrer"
+      }
+    ],
+    "instructions": [
+      {
+        "accounts": [
+          {
+            "isOptional": false,
+            "isSigner": true,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "maker"
+          },
+          {
+            "isOptional": false,
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "vault",
+            "pda": {
+              "kind": "pdaLinkNode",
+              "name": "vault"
+            }
+          },
+          {
+            "isOptional": false,
+            "isSigner": false,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "mintA"
+          },
+          {
+            "isOptional": false,
+            "isSigner": false,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "mintB"
+          },
+          {
+            "isOptional": false,
+            "isSigner": false,
+            "isWritable": true,
+            "kind": "instructionAccountNode",
+            "name": "escrow",
+            "pda": {
+              "kind": "pdaLinkNode",
+              "name": "escrow"
+            }
+          },
+          {
+            "defaultValue": {
+              "kind": "publicKeyValueNode",
+              "publicKey": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+            },
+            "isOptional": false,
+            "isSigner": false,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "tokenProgram"
+          },
+          {
+            "defaultValue": {
+              "kind": "publicKeyValueNode",
+              "publicKey": "11111111111111111111111111111111"
+            },
+            "isOptional": false,
+            "isSigner": false,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "systemProgram"
+          },
+          {
+            "isOptional": true,
+            "isSigner": false,
+            "isWritable": false,
+            "kind": "instructionAccountNode",
+            "name": "referrer"
+          }
+        ],
+        "arguments": [
+          {
+            "defaultValue": {
+              "kind": "numberValueNode",
+              "number": 0
+            },
+            "defaultValueStrategy": "omitted",
+            "kind": "instructionArgumentNode",
+            "name": "discriminator",
+            "type": {
+              "endian": "le",
+              "format": "u8",
+              "kind": "numberTypeNode"
+            }
+          },
+          {
+            "kind": "instructionArgumentNode",
+            "name": "seed",
+            "type": {
+              "endian": "le",
+              "format": "u64",
+              "kind": "numberTypeNode"
+            }
+          },
+          {
+            "kind": "instructionArgumentNode",
+            "name": "receive",
+            "type": {
+              "endian": "le",
+              "format": "u64",
+              "kind": "numberTypeNode"
+            }
+          },
+          {
+            "kind": "instructionArgumentNode",
+            "name": "bump",
+            "type": {
+              "endian": "le",
+              "format": "u8",
+              "kind": "numberTypeNode"
+            }
+          }
+        ],
+        "discriminators": [
+          {
+            "kind": "fieldDiscriminatorNode",
+            "name": "discriminator",
+            "offset": 0
+          }
+        ],
+        "docs": [
+          "Initialize a new escrow offer, deposit Token A into the vault, and set terms.",
+          "Supports an optional `referrer` account for affiliate fee sharing."
+        ],
+        "kind": "instructionNode",
+        "name": "processMakeInstruction",
+        "optionalAccountStrategy": "omitted"
+      }
+    ],
+    "kind": "programNode",
+    "name": "escrowFixtureV2",
+    "origin": "pinocchio-idl",
+    "pdas": [
+      {
+        "kind": "pdaNode",
+        "name": "vault",
+        "seeds": [
+          {
+            "kind": "variablePdaSeedNode",
+            "name": "escrow",
+            "type": {
+              "kind": "publicKeyTypeNode"
+            }
+          },
+          {
+            "kind": "variablePdaSeedNode",
+            "name": "mintA",
+            "type": {
+              "kind": "publicKeyTypeNode"
+            }
+          }
+        ]
+      },
+      {
+        "kind": "pdaNode",
+        "name": "escrow",
+        "seeds": [
+          {
+            "kind": "constantPdaSeedNode",
+            "type": {
+              "encoding": "utf8",
+              "kind": "stringTypeNode"
+            },
+            "value": {
+              "kind": "stringValueNode",
+              "string": "escrow"
+            }
+          },
+          {
+            "kind": "variablePdaSeedNode",
+            "name": "mintB",
+            "type": {
+              "kind": "publicKeyTypeNode"
+            }
+          },
+          {
+            "kind": "variablePdaSeedNode",
+            "name": "seed",
+            "type": {
+              "endian": "le",
+              "format": "u64",
+              "kind": "numberTypeNode"
+            }
+          }
+        ]
+      }
+    ],
+    "publicKey": "4Nd1mBQtrMJVYVfKf2PJy9NZPdUZmG3nP99rr4rUP3Fi",
+    "version": "0.0.0"
+  },
+  "standard": "codama",
+  "version": "1.6.0"
+}

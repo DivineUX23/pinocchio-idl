@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Idl {
     pub address: String,
@@ -14,14 +14,14 @@ pub struct Idl {
     pub events: Vec<IdlEvent>,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct IdlEvent {
     pub name: String,
     pub discriminator: Vec<u8>,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Metadata {
     pub name: String,
@@ -30,16 +30,18 @@ pub struct Metadata {
     pub description: String,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct IdlInstruction {
     pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub docs: Option<Vec<String>>,
     pub discriminator: Vec<u8>,
     pub accounts: Vec<IdlAccount>,
     pub args: Option<Vec<IdlArg>>,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct IdlAccount {
     pub name: String,
@@ -49,6 +51,12 @@ pub struct IdlAccount {
 
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub signer: bool,
+
+    #[serde(skip_serializing_if = "std::ops::Not::not", default)]
+    pub optional: bool,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub docs: Option<Vec<String>>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub address: Option<String>,
@@ -141,14 +149,14 @@ impl std::fmt::Display for FieldType {
     }
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct IdlArg {
     pub name: String,
     pub r#type: FieldType,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct IdlPda {
     pub seeds: Vec<IdlPdaSeed>,
@@ -156,7 +164,7 @@ pub struct IdlPda {
     pub program: Option<IdlPdaProgram>,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Clone)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum IdlPdaSeed {
     Account {
@@ -172,21 +180,23 @@ pub enum IdlPdaSeed {
     },
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Clone)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum IdlPdaProgram {
     Const { value: Vec<u8> },
     Account { path: String },
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct IdlAccountDef {
     pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub docs: Option<Vec<String>>,
     pub discriminator: Vec<u8>,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct IdlError {
     pub code: u32,
@@ -194,31 +204,50 @@ pub struct IdlError {
     pub msg: String,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct IdlTypeDefinition {
     pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub docs: Option<Vec<String>>,
     pub r#type: IdlType,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct IdlType {
     pub kind: String,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub fields: Vec<IdlField>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub variants: Vec<IdlEnumVariant>,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct IdlEnumVariant {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub docs: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fields: Option<Vec<IdlField>>,
+}
+
+#[derive(Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct IdlField {
     pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub docs: Option<Vec<String>>,
     pub r#type: FieldType,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct IdlConstant {
     pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub docs: Option<Vec<String>>,
     pub r#type: FieldType,
     pub value: String,
 }

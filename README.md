@@ -23,7 +23,8 @@
   - [2. Annotating Your Program](#2-annotating-your-program)
   - [3. Generating the IDL](#3-generating-the-idl)
   - [4. Generate Codama](#4-generate-codama)
-  - [5. GitHub Actions CI](#5-github-actions-ci)
+  - [5. Instant Codama TS Client Generation](#5-instant-codama-ts-client-generation)
+  - [6. GitHub Actions CI](#6-github-actions-ci)
 - [Migration from Anchor](#migration-from-anchor)
 - [Example: Escrow Program](#example-escrow-program)
 - [How It Works](#how-it-works)
@@ -62,11 +63,22 @@ If you are migrating from Anchor or evaluating alternatives, here is what you ga
 
 ## Quick Start
 
-Three steps: install the CLI, annotate your program, generate the IDL.
+You can scaffold a new project in one command, or annotate an existing program:
 
-Real-world example programs are available in the [pinocchio-idl-examples](https://github.com/DivineUX23/pinocchio-idl-examples) repository.
+### Scaffolding a New Program (Recommended)
 
-### Step 1 - Install the CLI
+```bash
+cargo install pinocchio-idl
+cargo pinocchio-idl init my-program
+cd my-program
+cargo pinocchio-idl generate
+```
+
+This creates a complete, production-ready Pinocchio program configured with `pinocchio-idl-macros`, sample instructions, PDA validation, GitHub Actions IDL check CI, and AI agent instructions.
+
+### Adding to an Existing Program
+
+#### Step 1 - Install the CLI
 
 ```bash
 cargo install pinocchio-idl
@@ -78,7 +90,7 @@ Verify:
 cargo pinocchio-idl --version
 ```
 
-### Step 2 - Add the macro dependency to your program
+#### Step 2 - Add the macro dependency to your program
 
 ```toml
 # Cargo.toml
@@ -86,7 +98,7 @@ cargo pinocchio-idl --version
 pinocchio-idl-macros = "0.1.1"
 ```
 
-### Step 3 - Annotate and generate
+#### Step 3 - Annotate and generate
 
 
 ```rust
@@ -266,7 +278,37 @@ pub struct EscrowCreated {
 | `[T; N]` | `[T; N]` | `sizeof(T)` x N |
 | `Vec<T>` | `vec<T>` | 4 (length prefix only) |
 | `Option<T>` | `{"option": T}` | 1 + `sizeof(T)` |
-| Custom enum or struct | name as-is | unsupported - use a primitive or `[u8; N]` |
+| `#[p_type]` Enum or Struct | `{"defined": {"name": T}}` | Defined type registered in IDL `types` |
+
+---
+
+#### `#[p_type]` - Custom Enums and Nested Structs
+
+Apply `#[p_type]` to user-defined enums or nested structs used in instruction data or state accounts. These are exported to Anchor's `types` definitions and Codama's `definedTypeNode`s:
+
+```rust
+use pinocchio_idl_macros::p_type;
+
+/// Protocol status state machine.
+#[p_type]
+pub enum EscrowStatus {
+    /// Waiting for deposit.
+    Pending,
+    /// Successfully completed.
+    Completed,
+    /// Cancelled by creator.
+    Cancelled,
+}
+
+/// Nested fee configuration.
+#[p_type]
+pub struct FeeConfig {
+    pub maker_fee_bps: u16,
+    pub taker_fee_bps: u16,
+}
+```
+
+Standard Rust doc comments (`///`) on instructions, states, types, enum variants, and fields are automatically extracted into IDL `docs` fields (which client generators like Codama turn into TSDoc tooltips).
 
 ---
 
@@ -283,7 +325,8 @@ use pinocchio_idl_macros::p_instruction;
         maker(signer, mut),
         escrow(mut, pda = ["escrow", maker, seed, bump], state = Escrow),
         mint_a,
-        vault_a(mut, ata = [escrow, mint_a])
+        vault_a(mut, ata = [escrow, mint_a]),
+        referrer(optional)
     ],
     data = [
         seed:    u64 = data[0..8],
@@ -306,6 +349,7 @@ pub fn process_make_instruction(accounts: &mut [AccountView], data: &[u8]) -> Pr
 |---|---|---|
 | Writable | `mut` | Validates `account.is_writable()` at runtime |
 | Signer | `signer` | Validates `account.is_signer()` at runtime |
+| Optional | `optional` | Marks account as optional in IDL (`optional: true` in Anchor, `isOptional: true` in Codama). Omitted from required account length check and safely guarded when provided. |
 | PDA seeds | `pda = ["literal", acc, arg, program = "Base58..."]` | Recorded in the IDL and verified on-chain. The `program` key is optional; it defaults to `crate::ID`. |
 | ATA | `ata = [owner, mint]` | Recorded in the IDL and validated on-chain via `pinocchio_token::state::Account`. Requires exactly two expressions. |
 | Linked state | `state = StructName` | Associates the account with a `#[p_state]` type in the IDL |
@@ -431,7 +475,33 @@ cargo pinocchio-idl generate -f codama
 
 ---
 
-### 5. GitHub Actions CI
+### 5. Instant Codama TS Client Generation
+
+Generate a fully typed TypeScript client SDK directly from your Pinocchio program in a single step:
+
+```bash
+# Generate TypeScript client SDK into ./clients/js (default)
+cargo pinocchio-idl client
+
+# Or using the alias `codegen` and `--ts`
+cargo pinocchio-idl codegen --ts ./clients/js
+
+# Specify a custom output directory and npm package name
+cargo pinocchio-idl client -o sdk/ts --package-name "@my-protocol/escrow-client"
+
+# Scaffold script only without immediately running npm install / codama
+cargo pinocchio-idl client --script-only
+```
+
+What `pinocchio-idl client` does automatically:
+1. Parses your Pinocchio Solana program source code.
+2. Derives native Codama rootNode IDL (`codama.json`).
+3. Scaffolds a complete TypeScript SDK package (`package.json`, `tsconfig.json`, `codama.mjs`).
+4. Automatically installs dependencies and runs Codama code generation, producing full typed accounts, instructions, PDAs, errors, types, and program entry points in `src/generated/`.
+
+---
+
+### 6. GitHub Actions CI
 
 Automate IDL generation in your CI pipeline to ensure your IDL stays in sync with your program source. Add this to your `.github/workflows/main.yml`:
 

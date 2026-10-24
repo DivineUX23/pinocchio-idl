@@ -35,7 +35,11 @@ pub fn p_instruction(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let mut injected_statement = Vec::new();
 
-    let required = parsed_attr.accounts.len();
+    let required = parsed_attr
+        .accounts
+        .iter()
+        .filter(|a| !a.is_optional)
+        .count();
 
     let account_names: Vec<String> = parsed_attr
         .accounts
@@ -87,30 +91,46 @@ pub fn p_instruction(attr: TokenStream, item: TokenStream) -> TokenStream {
         let name = account.name;
 
         if account.is_mut {
-            injected_statement.push(quote! {
-                if !#name.is_writable() {
-                    return Err(ProgramError::InvalidAccountData)
-                }
-            });
+            if account.is_optional {
+                injected_statement.push(quote! {
+                    if #name.address() != &::pinocchio::pubkey::Pubkey::default() && !#name.is_writable() {
+                        return Err(ProgramError::InvalidAccountData);
+                    }
+                });
+            } else {
+                injected_statement.push(quote! {
+                    if !#name.is_writable() {
+                        return Err(ProgramError::InvalidAccountData);
+                    }
+                });
+            }
         }
 
         if account.is_signer {
-            injected_statement.push(quote! {
-                if !#name.is_signer() {
-                    return Err(ProgramError::MissingRequiredSignature)
-                }
-            });
+            if account.is_optional {
+                injected_statement.push(quote! {
+                    if #name.address() != &::pinocchio::pubkey::Pubkey::default() && !#name.is_signer() {
+                        return Err(ProgramError::MissingRequiredSignature);
+                    }
+                });
+            } else {
+                injected_statement.push(quote! {
+                    if !#name.is_signer() {
+                        return Err(ProgramError::MissingRequiredSignature);
+                    }
+                });
+            }
         }
 
-        if let Some(init) = &account.init {
-            if init.0.len() != 2 {
-                return syn::Error::new_spanned(
-                    &name,
-                    "init = [...] requires exactly two expressions: [owner_account, mint_account]",
-                )
-                .to_compile_error()
-                .into();
-            }
+        if let Some(init) = &account.init
+            && init.0.len() != 2
+        {
+            return syn::Error::new_spanned(
+                &name,
+                "init = [...] requires exactly two expressions: [owner_account, mint_account]",
+            )
+            .to_compile_error()
+            .into();
         }
 
         if let Some(ata) = &account.ata {
@@ -148,7 +168,7 @@ pub fn p_instruction(attr: TokenStream, item: TokenStream) -> TokenStream {
             let owner_expr = make_address_expr(&owner_classes[0]);
             let mint_expr = make_address_expr(&owner_classes[1]);
 
-            injected_statement.push(quote! {
+            let ata_check = quote! {
                 {
                     let __ata_state = ::pinocchio_token::state::Account::from_account_view(#name)?;
                     if __ata_state.owner() != #owner_expr {
@@ -158,7 +178,17 @@ pub fn p_instruction(attr: TokenStream, item: TokenStream) -> TokenStream {
                         return Err(ProgramError::InvalidAccountData);
                     }
                 }
-            });
+            };
+
+            if account.is_optional {
+                injected_statement.push(quote! {
+                    if #name.address() != &::pinocchio::pubkey::Pubkey::default() {
+                        #ata_check
+                    }
+                });
+            } else {
+                injected_statement.push(ata_check);
+            }
         }
 
         if let Some(pda) = &account.pda {
@@ -202,7 +232,7 @@ pub fn p_instruction(attr: TokenStream, item: TokenStream) -> TokenStream {
                 }
             };
 
-            injected_statement.push(quote! {
+            let pda_check = quote! {
                 {
                     let __expected_pda = ::pinocchio::Address::from(
                         pinocchio_pubkey::derive_address(
@@ -215,7 +245,17 @@ pub fn p_instruction(attr: TokenStream, item: TokenStream) -> TokenStream {
                         return Err(ProgramError::InvalidArgument);
                     }
                 }
-            });
+            };
+
+            if account.is_optional {
+                injected_statement.push(quote! {
+                    if #name.address() != &::pinocchio::pubkey::Pubkey::default() {
+                        #pda_check
+                    }
+                });
+            } else {
+                injected_statement.push(pda_check);
+            }
         }
     }
 
@@ -277,10 +317,10 @@ pub fn p_state(attr: TokenStream, item: TokenStream) -> TokenStream {
             is_inject = true;
             Ok(())
         } else {
-            return Err(syn::Error::new_spanned(
+            Err(syn::Error::new_spanned(
                 &meta.path,
                 "unsupported #[p_state] attribute argument - inject is the only supported argument.",
-            ));
+            ))
         }
     });
 
@@ -348,6 +388,11 @@ pub fn p_constant(_attr: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 #[proc_macro_attribute]
+pub fn p_type(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    item
+}
+
+#[proc_macro_attribute]
 pub fn p_event(attr: TokenStream, item: TokenStream) -> TokenStream {
     let item_struct = parse_macro_input!(item as syn::ItemStruct);
     let struct_name = &item_struct.ident;
@@ -359,10 +404,10 @@ pub fn p_event(attr: TokenStream, item: TokenStream) -> TokenStream {
             is_inject = true;
             Ok(())
         } else {
-            return Err(syn::Error::new_spanned(
+            Err(syn::Error::new_spanned(
                 &meta.path,
                 "unsupported #[p_event] attribute argument - inject is the only supported argument.",
-            ));
+            ))
         }
     });
 

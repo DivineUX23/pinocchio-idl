@@ -13,7 +13,7 @@ pub enum PdaProgram {
     Account(Ident),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Ata(pub Vec<Expr>);
 
 impl Parse for Ata {
@@ -69,7 +69,7 @@ impl Ata {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Seed {
     pub seeds: Vec<Expr>,
     pub program: Option<PdaProgram>,

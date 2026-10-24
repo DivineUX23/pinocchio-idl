@@ -1,25 +1,15 @@
 use quote::ToTokens;
 use std::{fs, path::Path};
-use syn::{Fields, ItemConst, ItemEnum, ItemStruct, Lit};
+use syn::{Fields, Item, ItemConst, ItemEnum, ItemStruct, Lit};
 
 use anyhow::Context;
 use pinocchio_idl_core::{
-    Idl, IdlAccountDef, IdlConstant, IdlError, IdlField, IdlType, IdlTypeDefinition, Instruction,
-    Metadata, account_discriminator, derive_instruction_name, find_accounts_param, rust_to_idl,
+    Idl, IdlAccountDef, IdlConstant, IdlEnumVariant, IdlError, IdlField, IdlType,
+    IdlTypeDefinition, Instruction, Metadata, account_discriminator, derive_instruction_name,
+    extract_docs, find_accounts_param, rust_to_idl,
 };
 
 use crate::discover::discover;
-
-/*
-fn format_syn_error(err: syn::Error, file: &Path) -> anyhow::Error {
-    let mut msgs = Vec::new();
-    for e in err.into_iter() {
-        let span = e.span().start();
-        msgs.push(format!("{} at {}:{}:{}", e, file.display(), span.line, span.column));
-    }
-    anyhow::anyhow!("{}", msgs.join("\n"))
-}
-*/
 
 fn format_syn_error(err: syn::Error, file: &Path) -> anyhow::Error {
     let msgs: Vec<String> = err
@@ -34,6 +24,7 @@ fn format_syn_error(err: syn::Error, file: &Path) -> anyhow::Error {
 
 fn state_to_idl(item: &ItemStruct) -> syn::Result<(IdlAccountDef, IdlTypeDefinition)> {
     let name = item.ident.to_string();
+    let docs = extract_docs(&item.attrs);
 
     let fields = match &item.fields {
         Fields::Named(named) => named
@@ -48,6 +39,7 @@ fn state_to_idl(item: &ItemStruct) -> syn::Result<(IdlAccountDef, IdlTypeDefinit
 
                 Ok(IdlField {
                     name: field_name,
+                    docs: extract_docs(&f.attrs),
                     r#type: rust_to_idl(&f.ty)?,
                 })
             })
@@ -63,13 +55,16 @@ fn state_to_idl(item: &ItemStruct) -> syn::Result<(IdlAccountDef, IdlTypeDefinit
     Ok((
         IdlAccountDef {
             name: name.clone(),
+            docs: docs.clone(),
             discriminator: account_discriminator(&name).to_vec(),
         },
         IdlTypeDefinition {
             name,
+            docs,
             r#type: IdlType {
                 kind: "struct".to_string(),
                 fields,
+                variants: Vec::new(),
             },
         },
     ))
@@ -79,6 +74,7 @@ fn event_to_idl(
     item: &ItemStruct,
 ) -> syn::Result<(pinocchio_idl_core::IdlEvent, IdlTypeDefinition)> {
     let name = item.ident.to_string();
+    let docs = extract_docs(&item.attrs);
 
     let fields = match &item.fields {
         Fields::Named(named) => named
@@ -93,6 +89,7 @@ fn event_to_idl(
 
                 Ok(IdlField {
                     name: field_name,
+                    docs: extract_docs(&f.attrs),
                     r#type: rust_to_idl(&f.ty)?,
                 })
             })
@@ -112,12 +109,124 @@ fn event_to_idl(
         },
         IdlTypeDefinition {
             name,
+            docs,
             r#type: IdlType {
                 kind: "struct".to_string(),
                 fields,
+                variants: Vec::new(),
             },
         },
     ))
+}
+
+pub fn type_item_to_idl(item: &Item) -> syn::Result<IdlTypeDefinition> {
+    match item {
+        Item::Struct(s) => {
+            let name = s.ident.to_string();
+            let docs = extract_docs(&s.attrs);
+
+            let fields = match &s.fields {
+                Fields::Named(named) => named
+                    .named
+                    .iter()
+                    .map(|f| {
+                        let field_name = f
+                            .ident
+                            .as_ref()
+                            .ok_or_else(|| syn::Error::new_spanned(f, "type fields must be named"))?
+                            .to_string();
+
+                        Ok(IdlField {
+                            name: field_name,
+                            docs: extract_docs(&f.attrs),
+                            r#type: rust_to_idl(&f.ty)?,
+                        })
+                    })
+                    .collect::<syn::Result<Vec<_>>>()?,
+                other => {
+                    return Err(syn::Error::new_spanned(
+                        other,
+                        "#[p_type] structs require named fields",
+                    ));
+                }
+            };
+
+            Ok(IdlTypeDefinition {
+                name,
+                docs,
+                r#type: IdlType {
+                    kind: "struct".to_string(),
+                    fields,
+                    variants: Vec::new(),
+                },
+            })
+        }
+        Item::Enum(e) => {
+            let name = e.ident.to_string();
+            let docs = extract_docs(&e.attrs);
+
+            let mut variants = Vec::new();
+            for variant in &e.variants {
+                let v_name = variant.ident.to_string();
+                let v_docs = extract_docs(&variant.attrs);
+
+                let v_fields = match &variant.fields {
+                    Fields::Unit => None,
+                    Fields::Named(named) => {
+                        let fields = named
+                            .named
+                            .iter()
+                            .map(|f| {
+                                let f_name =
+                                    f.ident.as_ref().map(|i| i.to_string()).unwrap_or_default();
+                                Ok(IdlField {
+                                    name: f_name,
+                                    docs: extract_docs(&f.attrs),
+                                    r#type: rust_to_idl(&f.ty)?,
+                                })
+                            })
+                            .collect::<syn::Result<Vec<_>>>()?;
+                        Some(fields)
+                    }
+                    Fields::Unnamed(unnamed) => {
+                        let fields = unnamed
+                            .unnamed
+                            .iter()
+                            .enumerate()
+                            .map(|(i, f)| {
+                                Ok(IdlField {
+                                    name: format!("field{i}"),
+                                    docs: extract_docs(&f.attrs),
+                                    r#type: rust_to_idl(&f.ty)?,
+                                })
+                            })
+                            .collect::<syn::Result<Vec<_>>>()?;
+                        Some(fields)
+                    }
+                };
+
+                variants.push(IdlEnumVariant {
+                    name: v_name,
+                    docs: v_docs,
+                    fields: v_fields,
+                });
+            }
+
+            Ok(IdlTypeDefinition {
+                name,
+                docs,
+                r#type: IdlType {
+                    kind: "enum".to_string(),
+                    fields: Vec::new(),
+                    variants,
+                },
+            })
+        }
+        other => Err(syn::Error::new_spanned(
+            other,
+            "#[p_type] can only be applied to a struct or enum",
+        )),
+    }
 }
 
 fn errors_from_enum(item: &ItemEnum) -> syn::Result<Vec<IdlError>> {
@@ -250,12 +359,14 @@ fn errors_from_enum(item: &ItemEnum) -> syn::Result<Vec<IdlError>> {
 
 fn constant_from_item(item: &ItemConst) -> syn::Result<IdlConstant> {
     let name = item.ident.to_string();
+    let docs = extract_docs(&item.attrs);
     let ty = rust_to_idl(&item.ty)?;
 
     let value = item.expr.to_token_stream().to_string();
 
     Ok(IdlConstant {
         name,
+        docs,
         r#type: ty,
         value,
     })
@@ -264,9 +375,12 @@ fn constant_from_item(item: &ItemConst) -> syn::Result<IdlConstant> {
 pub fn build_idl(src_dir: &Path, metadata: Metadata) -> anyhow::Result<Idl> {
     let discovery = discover(src_dir).map_err(|e| anyhow::anyhow!("Discovery error: {}", e))?;
 
-    if discovery.instructions.is_empty() && discovery.states.is_empty() {
+    if discovery.instructions.is_empty()
+        && discovery.states.is_empty()
+        && discovery.types.is_empty()
+    {
         anyhow::bail!(
-            "No #[p_instruction] or #[p_state] annotations found in {}",
+            "No #[p_instruction], #[p_state], or #[p_type] annotations found in {}",
             src_dir.display()
         );
     }
@@ -284,8 +398,9 @@ pub fn build_idl(src_dir: &Path, metadata: Metadata) -> anyhow::Result<Idl> {
             instruction.add_accounts(&discovered.func.block.stmts, &accounts_ident.to_string());
 
             let name = derive_instruction_name(&discovered.func.sig.ident);
+            let docs = extract_docs(&discovered.func.attrs);
             instruction
-                .into_idl(name, index as u8)
+                .into_idl_with_docs(name, index as u8, docs)
                 .map_err(|e| format_syn_error(e, &discovered.file))
         })
         .collect::<anyhow::Result<Vec<_>>>()?;
@@ -307,6 +422,14 @@ pub fn build_idl(src_dir: &Path, metadata: Metadata) -> anyhow::Result<Idl> {
         .unzip();
 
     types.extend(event_types);
+
+    let custom_types: Vec<IdlTypeDefinition> = discovery
+        .types
+        .iter()
+        .map(|(item, file)| type_item_to_idl(item).map_err(|err| format_syn_error(err, file)))
+        .collect::<anyhow::Result<Vec<_>>>()?;
+
+    types.extend(custom_types);
 
     let errors: Vec<IdlError> = discovery
         .errors
@@ -337,6 +460,11 @@ pub fn build_idl(src_dir: &Path, metadata: Metadata) -> anyhow::Result<Idl> {
 
 pub fn write_idl(idl: &Idl, out_path: &Path) -> anyhow::Result<()> {
     let json = serde_json::to_string_pretty(idl).context("Failed to serialize IDL to JSON")?;
+
+    if let Some(parent) = out_path.parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("Failed to create directory {}", parent.display()))?;
+    }
 
     fs::write(out_path, &json)
         .with_context(|| format!("Failed to write IDL to {}", out_path.display()))?;

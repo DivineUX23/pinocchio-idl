@@ -3,7 +3,8 @@ members = [
     "crates/pinocchio-idl-core",
     "crates/pinocchio-idl-macros",
     "crates/pinocchio-idl-cli",
-    "crates/fixtures/escrow-fixture"
+    "crates/fixtures/escrow-fixture",
+    "crates/fixtures/escrow-fixture-v2"
 ]
 resolver = "2"
 

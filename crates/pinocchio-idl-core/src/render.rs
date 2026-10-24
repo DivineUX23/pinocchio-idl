@@ -22,19 +22,15 @@ fn codama_root(idl: &Idl) -> Value {
             "version": idl.metadata.version,
             "origin": "pinocchio-idl",
             "accounts": idl.accounts.iter()
-                .zip(idl.types.iter())
-                .map(|(acc, ty)| codama_account(acc, ty))
+                .filter_map(|acc| idl.types.iter().find(|t| t.name == acc.name).map(|ty| codama_account(acc, ty)))
                 .collect::<Vec<_>>(),
             "instructions": idl.instructions.iter().map(codama_instruction).collect::<Vec<_>>(),
 
-            "definedTypes": idl.types.iter().map(|ty| json!({
-                "kind": "definedTypeNode",
-                "name": camel_case(&ty.name),
-                "type": {
-                    "kind": "structTypeNode",
-                    "fields": ty.r#type.fields.iter().map(codama_struct_field).collect::<Vec<_>>(),
-                },
-            })).collect::<Vec<_>>(),
+            "definedTypes": idl.types.iter()
+                .filter(|t| !idl.accounts.iter().any(|a| a.name == t.name))
+                .filter(|t| !idl.events.iter().any(|e| e.name == t.name))
+                .map(codama_defined_type)
+                .collect::<Vec<_>>(),
 
             "pdas": pdas,
             "errors": idl.errors.iter().map(|e| json!({
@@ -49,7 +45,7 @@ fn codama_root(idl: &Idl) -> Value {
                 "type": codama_field_type(&c.r#type),
                 "value": {
                     "kind": "numberValueNode",
-                    "number": c.value,
+                    "number": eval_const_number(&c.value),
                 },
             })).collect::<Vec<_>>(),
         },
@@ -97,6 +93,72 @@ fn codama_event(event: &crate::IdlEvent, ty: &IdlTypeDefinition) -> Value {
     })
 }
 
+fn codama_defined_type(ty: &IdlTypeDefinition) -> Value {
+    let type_node = match ty.r#type.kind.as_str() {
+        "enum" => {
+            let variants = ty
+                .r#type
+                .variants
+                .iter()
+                .map(|v| {
+                    let mut node = if let Some(fields) = &v.fields {
+                        if !fields.is_empty() {
+                            json!({
+                                "kind": "enumStructVariantTypeNode",
+                                "name": camel_case(&v.name),
+                                "struct": {
+                                    "kind": "structTypeNode",
+                                    "fields": fields.iter().map(codama_struct_field).collect::<Vec<_>>(),
+                                }
+                            })
+                        } else {
+                            json!({
+                                "kind": "enumEmptyVariantTypeNode",
+                                "name": camel_case(&v.name),
+                            })
+                        }
+                    } else {
+                        json!({
+                            "kind": "enumEmptyVariantTypeNode",
+                            "name": camel_case(&v.name),
+                        })
+                    };
+                    if let Some(docs) = &v.docs {
+                        node["docs"] = json!(docs);
+                    }
+                    node
+                })
+                .collect::<Vec<_>>();
+
+            json!({
+                "kind": "enumTypeNode",
+                "variants": variants,
+                "size": {
+                    "kind": "numberTypeNode",
+                    "format": "u8",
+                    "endian": "le"
+                }
+            })
+        }
+        _ => json!({
+            "kind": "structTypeNode",
+            "fields": ty.r#type.fields.iter().map(codama_struct_field).collect::<Vec<_>>(),
+        }),
+    };
+
+    let mut node = json!({
+        "kind": "definedTypeNode",
+        "name": camel_case(&ty.name),
+        "type": type_node,
+    });
+
+    if let Some(docs) = &ty.docs {
+        node["docs"] = json!(docs);
+    }
+
+    node
+}
+
 fn codama_account(account: &crate::IdlAccountDef, ty: &IdlTypeDefinition) -> Value {
     let discriminator_bytes = &account.discriminator;
 
@@ -104,7 +166,7 @@ fn codama_account(account: &crate::IdlAccountDef, ty: &IdlTypeDefinition) -> Val
         .chain(ty.r#type.fields.iter().map(codama_struct_field))
         .collect();
 
-    json!({
+    let mut node = json!({
         "kind": "accountNode",
         "name": camel_case(&account.name),
         "data": {
@@ -124,7 +186,13 @@ fn codama_account(account: &crate::IdlAccountDef, ty: &IdlTypeDefinition) -> Val
                 },
             },
         }],
-    })
+    });
+
+    if let Some(docs) = &account.docs {
+        node["docs"] = json!(docs);
+    }
+
+    node
 }
 
 fn codama_instruction(instruction: &IdlInstruction) -> Value {
@@ -133,7 +201,7 @@ fn codama_instruction(instruction: &IdlInstruction) -> Value {
     let mut arguments = vec![codama_discriminator_argument(discriminator_bytes)];
     arguments.extend(args.iter().map(codama_instruction_argument));
 
-    json!({
+    let mut node = json!({
         "kind": "instructionNode",
         "name": camel_case(&instruction.name),
         "optionalAccountStrategy": "omitted",
@@ -144,7 +212,13 @@ fn codama_instruction(instruction: &IdlInstruction) -> Value {
             "name": "discriminator",
             "offset": 0,
         }],
-    })
+    });
+
+    if let Some(docs) = &instruction.docs {
+        node["docs"] = json!(docs);
+    }
+
+    node
 }
 
 fn codama_instruction_account(account: &IdlAccount, _args: &[IdlArg]) -> Value {
@@ -153,8 +227,12 @@ fn codama_instruction_account(account: &IdlAccount, _args: &[IdlArg]) -> Value {
         "name": camel_case(&account.name),
         "isWritable": account.writable,
         "isSigner": account.signer,
-        "isOptional": false,
+        "isOptional": account.optional,
     });
+
+    if let Some(docs) = &account.docs {
+        value["docs"] = json!(docs);
+    }
 
     if let Some(addr) = &account.address {
         value["defaultValue"] = json!({
@@ -236,11 +314,17 @@ fn codama_discriminator_field(discriminator: &[u8]) -> Value {
 }
 
 fn codama_struct_field(field: &IdlField) -> Value {
-    json!({
+    let mut node = json!({
         "kind": "structFieldTypeNode",
         "name": camel_case(&field.name),
         "type": codama_field_type(&field.r#type),
-    })
+    });
+
+    if let Some(docs) = &field.docs {
+        node["docs"] = json!(docs);
+    }
+
+    node
 }
 
 fn codama_field_type(ty: &FieldType) -> Value {
@@ -314,8 +398,73 @@ fn hex_bytes(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
+fn eval_expr(s: &str) -> Result<i64, ()> {
+    let mut sum: i64 = 0;
+    for add_part in s.split('+') {
+        let mut prod: i64 = 1;
+        for mul_part in add_part.split('*') {
+            let part = mul_part
+                .trim()
+                .trim_end_matches("u64")
+                .trim_end_matches("i64")
+                .trim_end_matches("u32")
+                .trim_end_matches("i32")
+                .trim_end_matches("u16")
+                .trim_end_matches("i16")
+                .trim_end_matches("u8")
+                .trim_end_matches("i8")
+                .trim_end_matches("usize")
+                .trim();
+            if part.is_empty() {
+                return Err(());
+            }
+            let n: i64 = part.parse().map_err(|_| ())?;
+            prod = prod.checked_mul(n).ok_or(())?;
+        }
+        sum = sum.checked_add(prod).ok_or(())?;
+    }
+    Ok(sum)
+}
+
+fn eval_const_number(val_str: &str) -> Value {
+    let trimmed = val_str.trim().trim_matches('"');
+    if let Ok(num) = eval_expr(trimmed) {
+        return json!(num);
+    }
+    if let Ok(num) = trimmed.parse::<i64>() {
+        return json!(num);
+    }
+    json!(val_str)
+}
+
 fn camel_case(name: &str) -> String {
     let name = name.trim_start_matches('_');
+    let is_screaming = name.chars().any(|c| c.is_alphabetic())
+        && name
+            .chars()
+            .all(|c| c.is_uppercase() || c == '_' || c == '-' || c.is_numeric());
+
+    if is_screaming {
+        let words: Vec<&str> = name
+            .split(|c| c == '_' || c == '-')
+            .filter(|w| !w.is_empty())
+            .collect();
+        let mut out = String::new();
+        for (i, word) in words.iter().enumerate() {
+            let lower = word.to_lowercase();
+            if i == 0 {
+                out.push_str(&lower);
+            } else {
+                let mut chars = lower.chars();
+                if let Some(first) = chars.next() {
+                    out.extend(first.to_uppercase());
+                    out.extend(chars);
+                }
+            }
+        }
+        return out;
+    }
+
     let mut out = String::with_capacity(name.len());
     let mut uppercase_next = false;
     for (i, ch) in name.chars().enumerate() {

@@ -36,7 +36,7 @@ pub fn run_doctor(src_dir: &Path) -> Result<DoctorReport> {
                     let name = func.sig.ident.to_string();
                     let line = func.sig.ident.span().start().line;
 
-                    if let Some(_attr) = find_attr(&func.attrs, "p_instruction") {
+                    if let Some(attr) = find_attr(&func.attrs, "p_instruction") {
                         if !annotated_instructions.insert(name.clone()) {
                             report.findings.push(DoctorFinding {
                                 file: file_display.clone(),
@@ -44,6 +44,30 @@ pub fn run_doctor(src_dir: &Path) -> Result<DoctorReport> {
                                 severity: "warning".to_string(),
                                 message: format!("duplicate instruction name `{name}`"),
                             });
+                        }
+
+                        // Check optional accounts ordering
+                        if let syn::Meta::List(list) = &attr.meta
+                            && let Ok(instruction) =
+                                syn::parse2::<pinocchio_idl_core::Instruction>(list.tokens.clone())
+                        {
+                            let mut seen_optional = false;
+                            for acc in &instruction.accounts {
+                                if acc.is_optional {
+                                    seen_optional = true;
+                                } else if seen_optional {
+                                    report.findings.push(DoctorFinding {
+                                            file: file_display.clone(),
+                                            line,
+                                            severity: "warning".to_string(),
+                                            message: format!(
+                                                "in instruction `{name}`, required account `{}` appears after an optional account. Optional accounts should be placed at the end of the accounts list.",
+                                                acc.name
+                                            ),
+                                        });
+                                    break;
+                                }
+                            }
                         }
                     } else if name.starts_with("process_")
                         || name == "process"
@@ -67,13 +91,16 @@ pub fn run_doctor(src_dir: &Path) -> Result<DoctorReport> {
                         || name.ends_with("Account")
                         || name.ends_with("Config");
 
-                    if looks_like_state && find_attr(&s.attrs, "p_state").is_none() {
+                    if looks_like_state
+                        && find_attr(&s.attrs, "p_state").is_none()
+                        && find_attr(&s.attrs, "p_type").is_none()
+                    {
                         report.findings.push(DoctorFinding {
                             file: file_display.clone(),
                             line,
                             severity: "warning".to_string(),
                             message: format!(
-                                "struct `{name}` looks like state but has no #[p_state]"
+                                "struct `{name}` looks like state or config but has no #[p_state] or #[p_type]"
                             ),
                         });
                     }
@@ -89,6 +116,19 @@ pub fn run_doctor(src_dir: &Path) -> Result<DoctorReport> {
                             severity: "warning".to_string(),
                             message: format!(
                                 "enum `{name}` looks like an error but has no #[p_error]"
+                            ),
+                        });
+                    } else if (name.ends_with("Type")
+                        || name.ends_with("Kind")
+                        || name.ends_with("Status"))
+                        && find_attr(&e.attrs, "p_type").is_none()
+                    {
+                        report.findings.push(DoctorFinding {
+                            file: file_display.clone(),
+                            line,
+                            severity: "info".to_string(),
+                            message: format!(
+                                "enum `{name}` looks like a custom type but has no #[p_type]"
                             ),
                         });
                     }
