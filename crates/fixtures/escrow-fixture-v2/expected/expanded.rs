@@ -53,7 +53,7 @@ unsafe impl ::core::clone::TrivialClone for EscrowStatus {}
 #[automatically_derived]
 impl ::core::clone::Clone for EscrowStatus {
     #[inline]
-    fn clone(&self) -> EscrowStatus {
+    fn clone(&self) -> Self {
         *self
     }
 }
@@ -78,19 +78,13 @@ impl ::core::marker::StructuralPartialEq for EscrowStatus {}
 #[automatically_derived]
 impl ::core::cmp::PartialEq for EscrowStatus {
     #[inline]
-    fn eq(&self, other: &EscrowStatus) -> bool {
-        let __self_discr = ::core::intrinsics::discriminant_value(self);
-        let __arg1_discr = ::core::intrinsics::discriminant_value(other);
-        __self_discr == __arg1_discr
+    fn eq(&self, other: &Self) -> bool {
+        ::core::intrinsics::discriminant_value(self)
+            == ::core::intrinsics::discriminant_value(other)
     }
 }
 #[automatically_derived]
-impl ::core::cmp::Eq for EscrowStatus {
-    #[inline]
-    #[doc(hidden)]
-    #[coverage(off)]
-    fn assert_fields_are_eq(&self) {}
-}
+impl ::core::cmp::Eq for EscrowStatus {}
 /// Fee and reward configuration applied to the escrow trade.
 #[repr(C)]
 pub struct FeeConfig {
@@ -105,7 +99,7 @@ unsafe impl ::core::clone::TrivialClone for FeeConfig {}
 #[automatically_derived]
 impl ::core::clone::Clone for FeeConfig {
     #[inline]
-    fn clone(&self) -> FeeConfig {
+    fn clone(&self) -> Self {
         let _: ::core::clone::AssertParamIsClone<u16>;
         *self
     }
@@ -131,7 +125,7 @@ impl ::core::marker::StructuralPartialEq for FeeConfig {}
 #[automatically_derived]
 impl ::core::cmp::PartialEq for FeeConfig {
     #[inline]
-    fn eq(&self, other: &FeeConfig) -> bool {
+    fn eq(&self, other: &Self) -> bool {
         self.maker_fee_bps == other.maker_fee_bps
             && self.referral_bps == other.referral_bps
     }
