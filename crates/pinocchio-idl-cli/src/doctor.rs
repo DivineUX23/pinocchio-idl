@@ -20,6 +20,7 @@ pub fn run_doctor(src_dir: &Path) -> Result<DoctorReport> {
     let files = walk_rs_files(src_dir);
     let mut report = DoctorReport::default();
     let mut annotated_instructions = HashSet::new();
+    let mut seen_instruction_ids = std::collections::HashMap::new();
 
     for path in &files {
         let content = fs::read_to_string(path)
@@ -46,26 +47,86 @@ pub fn run_doctor(src_dir: &Path) -> Result<DoctorReport> {
                             });
                         }
 
-                        // Check optional accounts ordering
+                        // Parse instruction attribute details
                         if let syn::Meta::List(list) = &attr.meta
                             && let Ok(instruction) =
                                 syn::parse2::<pinocchio_idl_core::Instruction>(list.tokens.clone())
                         {
+                            // Check for duplicate numeric instruction ID
+                            if let Some(id) = instruction.id {
+                                if let Some(prev_name) =
+                                    seen_instruction_ids.insert(id, name.clone())
+                                {
+                                    report.findings.push(DoctorFinding {
+                                        file: file_display.clone(),
+                                        line,
+                                        severity: "error".to_string(),
+                                        message: format!(
+                                            "duplicate instruction id `{id}` in `{name}`, already assigned to `{prev_name}`"
+                                        ),
+                                    });
+                                }
+                            }
+
+                            // Check optional accounts ordering
                             let mut seen_optional = false;
                             for acc in &instruction.accounts {
                                 if acc.is_optional {
                                     seen_optional = true;
                                 } else if seen_optional {
                                     report.findings.push(DoctorFinding {
-                                            file: file_display.clone(),
-                                            line,
-                                            severity: "warning".to_string(),
-                                            message: format!(
-                                                "in instruction `{name}`, required account `{}` appears after an optional account. Optional accounts should be placed at the end of the accounts list.",
-                                                acc.name
-                                            ),
-                                        });
+                                        file: file_display.clone(),
+                                        line,
+                                        severity: "warning".to_string(),
+                                        message: format!(
+                                            "in instruction `{name}`, required account `{}` appears after an optional account. Optional accounts should be placed at the end of the accounts list.",
+                                            acc.name
+                                        ),
+                                    });
                                     break;
+                                }
+                            }
+
+                            // Check PDA accounts for bump availability if inject is used
+                            if instruction.inject {
+                                let has_bump_arg = instruction
+                                    .data
+                                    .as_deref()
+                                    .map(|fields| {
+                                        fields.iter().any(|d| {
+                                            let n = d.name.to_string().to_ascii_lowercase();
+                                            n == "bump" || n == "bump_seed" || n == "bumpseed"
+                                        })
+                                    })
+                                    .unwrap_or(false);
+
+                                for acc in &instruction.accounts {
+                                    if let Some(pda) = &acc.pda {
+                                        let has_bump_in_seeds = pda.seeds.iter().any(|s| {
+                                            if let syn::Expr::Path(p) = s {
+                                                let seg = p.path.segments.last().map(|seg| {
+                                                    seg.ident.to_string().to_ascii_lowercase()
+                                                });
+                                                seg.as_deref() == Some("bump")
+                                                    || seg.as_deref() == Some("bump_seed")
+                                                    || seg.as_deref() == Some("bumpseed")
+                                            } else {
+                                                false
+                                            }
+                                        });
+
+                                        if !has_bump_in_seeds && !has_bump_arg {
+                                            report.findings.push(DoctorFinding {
+                                                file: file_display.clone(),
+                                                line,
+                                                severity: "info".to_string(),
+                                                message: format!(
+                                                    "in instruction `{name}`, PDA account `{}` has no explicit bump seed or `bump: u8` in data. On-chain inject requires bump for canonical derivation.",
+                                                    acc.name
+                                                ),
+                                            });
+                                        }
+                                    }
                                 }
                             }
                         }

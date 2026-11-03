@@ -652,3 +652,106 @@ pub fn process_order(accounts: &mut [AccountView], data: &[u8]) -> ProgramResult
 
     let _ = fs::remove_dir_all(&temp_dir);
 }
+
+#[test]
+fn test_pda_explicit_bump_stripped_from_client_idl() {
+    let temp_dir = std::env::temp_dir().join(format!(
+        "pinocchio_test_pda_bump_{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir_all(&temp_dir).unwrap();
+
+    let lib_code = r#"
+use pinocchio_idl_macros::{p_instruction, p_state};
+
+#[p_state]
+pub struct Escrow {
+    pub maker: [u8; 32],
+    pub seed: u64,
+    pub bump: u8,
+}
+
+#[p_instruction(
+    id = 0,
+    accounts = [
+        maker(signer, mut),
+        escrow(mut, pda = ["escrow", maker, seed, bump], state = Escrow),
+    ],
+    data = [
+        seed: u64 = data[0..8],
+        bump: u8 = data[8..9]
+    ]
+)]
+pub fn make_escrow(accounts: &[pinocchio::AccountView], data: &[u8]) -> pinocchio::ProgramResult {
+    Ok(())
+}
+"#;
+
+    let src_dir = temp_dir.join("src");
+    fs::create_dir_all(&src_dir).unwrap();
+    fs::write(src_dir.join("lib.rs"), lib_code).unwrap();
+
+    let metadata = Metadata {
+        name: "pda_bump_test".to_string(),
+        version: "0.1.0".to_string(),
+        spec: "0.1.0".to_string(),
+        description: "pda bump test".to_string(),
+    };
+    let idl = pinocchio_idl_cli::build_idl(&src_dir, metadata)
+        .expect("should build IDL successfully");
+
+    // 1. Verify in Anchor IDL, the escrow PDA has seeds: ["escrow", maker, seed] (bump stripped)
+    let make_ix = &idl.instructions[0];
+    let escrow_acc = make_ix.accounts.iter().find(|a| a.name == "escrow").unwrap();
+    let pda = escrow_acc.pda.as_ref().expect("escrow should have pda");
+    assert_eq!(pda.seeds.len(), 3, "bump should be stripped from IDL seeds");
+
+    // 2. Verify in Codama JSON, pdaNode has only 3 seeds: ["escrow", maker, seed]
+    let codama_json = pinocchio_idl_core::render::to_codama_json(&idl).unwrap();
+    let codama_val: serde_json::Value = serde_json::from_str(&codama_json).unwrap();
+    let pdas = codama_val["program"]["pdas"].as_array().unwrap();
+    let escrow_pda = pdas.iter().find(|p| p["name"] == "escrow").unwrap();
+    let seeds = escrow_pda["seeds"].as_array().unwrap();
+    assert_eq!(seeds.len(), 3, "Codama pdaNode should not include trailing bump seed");
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[test]
+fn test_doctor_duplicate_instruction_id() {
+    let temp_dir = std::env::temp_dir().join(format!(
+        "pinocchio_test_doctor_{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir_all(&temp_dir).unwrap();
+
+    let lib_code = r#"
+use pinocchio_idl_macros::p_instruction;
+
+#[p_instruction(id = 0, accounts = [payer(signer, mut)])]
+pub fn ix_one(accounts: &[pinocchio::AccountView], data: &[u8]) -> pinocchio::ProgramResult {
+    Ok(())
+}
+
+#[p_instruction(id = 0, accounts = [payer(signer, mut)])]
+pub fn ix_two(accounts: &[pinocchio::AccountView], data: &[u8]) -> pinocchio::ProgramResult {
+    Ok(())
+}
+"#;
+
+    let src_dir = temp_dir.join("src");
+    fs::create_dir_all(&src_dir).unwrap();
+    fs::write(src_dir.join("lib.rs"), lib_code).unwrap();
+
+    let report = pinocchio_idl_cli::doctor::run_doctor(&src_dir).unwrap();
+    let duplicate_finding = report.findings.iter().find(|f| f.message.contains("duplicate instruction id `0`"));
+    assert!(duplicate_finding.is_some(), "Doctor should report duplicate instruction numeric ID");
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}

@@ -245,7 +245,7 @@ The macro expands to:
 
 ```rust
 impl Escrow {
-    pub const SPACE: usize = 8 + 32 + 32 + 32 + 8 + 1;
+    pub const SPACE: usize = ::core::mem::size_of::<Self>();
     pub const DISCRIMINATOR: [u8; 8] = [31, 213, 123, 187, 186, 22, 218, 155];
 }
 ```
@@ -419,7 +419,7 @@ if !maker.is_signer() {
     return Err(ProgramError::MissingRequiredSignature);
 }
 if !escrow.is_writable() {
-    return Err(ProgramError::MissingRequiredSignature);
+    return Err(ProgramError::InvalidAccountData);
 }
 // ...continued for all declared constraints
 ```
@@ -769,23 +769,18 @@ The following invariants are strictly enforced by the macro implementation to gu
 
 ---
 
-### 1. PDA Bump Must Be an Explicit Seed
+### 1. On-Chain PDA Validation vs. Client IDL Derivation
 
-`pinocchio-idl` does not implement bump-search (`find_program_address`-style) validation. PDA address derivation is performed against exactly the seed list provided; no automatic bump trial loop is executed.
+In Solana, PDAs are derived off-chain using canonical bump-search (`findProgramAddressSync`), which takes base seeds `["escrow", maker, seed]` and searches for a 1-byte bump (`255..0`).
 
-The bump must be included as an explicit entry in the `pda = [...]` seed list, sourced from instruction data. Omitting it causes `derive_address` to operate on a different input than the canonical address and will result in account validation failure at runtime even for a correctly derived account.
+To avoid spending expensive on-chain compute units searching for bumps, Pinocchio handlers receive the derived `bump: u8` in instruction data and validate the address using `create_program_address` (via `pinocchio_pubkey::derive_address`).
+
+In `pinocchio-idl`, you declare the bump in `pda = [...]` and `data = [...]`:
 
 ```rust
-// Incorrect - bump absent from seed list; on-chain PDA verification will always fail
-escrow(mut, pda = ["escrow", maker, seed], state = Escrow)
-
-// Correct - bump present as an explicit seed sourced from instruction data
+// On-chain handler annotation
 escrow(mut, pda = ["escrow", maker, seed, bump], state = Escrow)
-```
 
-The `data` section of the same instruction must declare the `bump` field:
-
-```rust
 data = [
     seed:    u64 = data[0..8],
     receive: u64 = data[8..16],
@@ -793,30 +788,31 @@ data = [
 ]
 ```
 
----
-
-### 2. The Generated IDL Contains the Bump as an Explicit Seed Entry
-
-Because bumps are passed as explicit seeds, the generated IDL records the bump as a seed of kind `arg`. Anchor client tooling that performs automatic bump inference - internally calling `findProgramAddressSync` and discarding the bump seed - will construct a seed list that does not match the on-chain verification.
-
-When consuming this IDL through such tooling, verify that client-side PDA derivation includes the bump as an explicit seed and matches the seed order declared in the IDL.
+When generating Anchor and Codama IDLs, `pinocchio-idl` automatically recognizes the trailing `bump` argument seed and isolates it from the client-side derivation schema:
+- **On-chain (`inject`)**: Generates constant-time address derivation matching `["escrow", maker, seed, &[bump]]`.
+- **Client SDKs (Codama & Anchor)**: Generates client helper functions like `findEscrowPda({ maker, seed })` that derive the address using the base seeds and return `{ address, bump }`, eliminating double-bump search errors.
 
 ```typescript
-// The bump must be passed explicitly on the client side
-const [escrowPda] = PublicKey.findProgramAddressSync(
-  [
-    Buffer.from("escrow"),
-    makerPubkey.toBuffer(),
-    seedBuffer,
-    Buffer.from([bump]),   // corresponds to the `arg` seed in the IDL
-  ],
-  programId
-);
+// Client-side derivation (Codama or @solana/web3.js)
+const [escrowPda, bump] = await findEscrowPda({ maker, seed });
+
+// Pass the derived bump into the instruction
+const ix = getMakeInstruction({
+  maker,
+  escrow: escrowPda,
+  seed,
+  receive,
+  bump,
+});
 ```
 
 ---
 
-### 3. `ata = [...]` Requires Exactly Two Expressions
+### 2. `ata = [...]` Derivation and Dependencies
+
+`ata = [owner, mint]` declares an Associated Token Account.
+- In generated IDLs and Codama client SDKs, `pinocchio-idl` generates the canonical 3-seed derivation `[owner, TOKEN_PROGRAM_ID, mint]` under `ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL`.
+- When using `inject`, the handler verifies token account ownership and mint at runtime via `pinocchio_token::state::Account`. Ensure `pinocchio-token = "0.6"` is included in your `Cargo.toml`.
 
 The `ata` constraint expects exactly two expressions - the owner account followed by the mint account - in that order. Any other length is rejected at macro-expansion time.
 

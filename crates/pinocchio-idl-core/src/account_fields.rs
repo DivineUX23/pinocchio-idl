@@ -5,7 +5,7 @@ use syn::{
     parse::{Parse, ParseStream},
 };
 
-use crate::{IdlPda, IdlPdaProgram, bs58_decode, seed_expr_to_idl};
+use crate::{IdlPda, IdlPdaProgram, IdlPdaSeed, bs58_decode, seed_expr_to_idl};
 
 #[derive(Debug, Clone)]
 pub enum PdaProgram {
@@ -45,20 +45,27 @@ impl Ata {
             ));
         }
 
-        let seeds = self
-            .0
-            .iter()
-            .map(|expr| seed_expr_to_idl(expr, account_names, arg_names))
-            .collect::<syn::Result<Vec<_>>>()?;
+        let owner_seed = seed_expr_to_idl(&self.0[0], account_names, arg_names)?;
+        let mint_seed = seed_expr_to_idl(&self.0[1], account_names, arg_names)?;
 
-        // associated Token program address
-        //let atoken_bytes: Vec<u8> = bs58_decode("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL")
-        //.expect("AToken address is valid Base58");
-
+        // Canonical Associated Token Program: ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL
         const ATOKEN_ID: [u8; 32] = [
             140, 151, 37, 143, 78, 36, 137, 241, 187, 61, 16, 41, 20, 142, 13, 131, 11, 90, 19,
             153, 218, 255, 16, 132, 4, 142, 123, 216, 219, 233, 248, 89,
         ];
+
+        // Canonical SPL Token Program: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        const TOKEN_PROGRAM_ID: [u8; 32] = [
+            6, 221, 246, 225, 215, 101, 161, 147, 217, 203, 225, 70, 206, 235, 121, 172, 28, 180,
+            133, 237, 95, 91, 55, 145, 58, 140, 245, 133, 126, 255, 0, 169,
+        ];
+
+        let token_program_seed = IdlPdaSeed::Const {
+            value: TOKEN_PROGRAM_ID.to_vec(),
+        };
+
+        // Canonical ATA seeds: [wallet, token_program, mint]
+        let seeds = vec![owner_seed, token_program_seed, mint_seed];
 
         Ok(IdlPda {
             seeds,
@@ -136,11 +143,28 @@ impl ToTokens for Seed {
 
 impl Seed {
     pub fn into_idl(&self, account_names: &[String], arg_names: &[String]) -> syn::Result<IdlPda> {
-        let seeds = self
+        let mut seeds = self
             .seeds
             .iter()
             .map(|expr| seed_expr_to_idl(expr, account_names, arg_names))
             .collect::<syn::Result<Vec<_>>>()?;
+
+        // If the trailing seed is an argument named "bump" (e.g. bump, bump_seed, bumpSeed),
+        // it represents the canonical PDA derivation bump passed to on-chain `derive_address`.
+        // In client-facing IDLs (Anchor & Codama), seeds represent the input to `findProgramAddress`
+        // which searches for the bump. Including the bump causes client helpers to search for
+        // a second bump, deriving an invalid address.
+        if let Some(last) = seeds.last() {
+            if match last {
+                IdlPdaSeed::Arg { path } => {
+                    let p = path.to_ascii_lowercase();
+                    p == "bump" || p == "bump_seed" || p == "bumpseed"
+                }
+                _ => false,
+            } {
+                seeds.pop();
+            }
+        }
 
         let program = match &self.program {
             None => None,

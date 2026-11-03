@@ -566,6 +566,21 @@
             }
           },
           {
+            "kind": "constantPdaSeedNode",
+            "type": {
+              "kind": "fixedSizeTypeNode",
+              "size": 32,
+              "type": {
+                "kind": "bytesTypeNode"
+              }
+            },
+            "value": {
+              "data": "06ddf6e1d765a193d9cbe146ceeb79ac1cb485ed5f5b37913a8cf5857eff00a9",
+              "encoding": "base16",
+              "kind": "bytesValueNode"
+            }
+          },
+          {
             "kind": "variablePdaSeedNode",
             "name": "mintA",
             "type": {

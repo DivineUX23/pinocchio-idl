@@ -559,11 +559,27 @@ fn collect_program_pdas(idl: &Idl) -> Vec<Value> {
     pdas
 }
 
+fn is_bump_seed(seed: &IdlPdaSeed) -> bool {
+    match seed {
+        IdlPdaSeed::Arg { path } => {
+            let p = path.to_ascii_lowercase();
+            p == "bump" || p == "bump_seed" || p == "bumpseed"
+        }
+        _ => false,
+    }
+}
+
 fn codama_pda_node(name: &str, seeds: &[IdlPdaSeed], args: &[IdlArg]) -> Value {
+    let effective_seeds = if seeds.last().map(is_bump_seed).unwrap_or(false) {
+        &seeds[..seeds.len() - 1]
+    } else {
+        seeds
+    };
+
     json!({
         "kind": "pdaNode",
         "name": camel_case(name),
-        "seeds": seeds.iter().map(|s| codama_pda_seed(s, args)).collect::<Vec<_>>(),
+        "seeds": effective_seeds.iter().map(|s| codama_pda_seed(s, args)).collect::<Vec<_>>(),
     })
 }
 

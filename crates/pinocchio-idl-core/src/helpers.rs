@@ -453,6 +453,8 @@ pub fn rust_to_idl_with_field(field: &syn::Field, strict_pubkeys: bool) -> syn::
     }
 }
 
+
+
 fn extract_arg<'a>(typ: &'a syn::TypePath, wrapper: &str) -> syn::Result<&'a Type> {
     let last = typ.path.segments.last().unwrap();
 

@@ -59,6 +59,7 @@ crate-type = ["cdylib", "lib"]
 pinocchio = "0.11"
 pinocchio-pubkey = "0.3"
 pinocchio-system = "0.6"
+pinocchio-token = "0.6"
 pinocchio-idl-macros = "0.1.3"
 
 [features]
@@ -72,12 +73,11 @@ default = []
     let lib_rs = r#"use pinocchio::{
     AccountView, ProgramResult,
     error::ProgramError,
-    msg,
 };
 use pinocchio_idl_macros::{p_constant, p_error, p_instruction, p_state, p_type};
 
 // Replace with your actual deployed program ID
-pinocchio::address::declare_id!("11111111111111111111111111111111111111111");
+pinocchio::address::declare_id!("11111111111111111111111111111111");
 
 /// Protocol version identifier.
 #[p_constant]
@@ -131,7 +131,7 @@ pub fn initialize(accounts: &mut [AccountView], data: &[u8]) -> ProgramResult {
         return Err(ProgramError::NotEnoughAccountKeys);
     };
 
-    msg!("Initializing counter program with pinocchio-idl!");
+    let _ = (authority, counter, system_program, initial_count, data);
     Ok(())
 }
 "#;
