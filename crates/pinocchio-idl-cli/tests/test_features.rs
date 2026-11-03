@@ -251,6 +251,7 @@ fn test_instant_codama_client_generation() {
         package_name: Some("@my-protocol/counter-client".to_string()),
         run: false,
         script_only: true,
+        strict_pubkeys: false,
     };
 
     let result = pinocchio_idl_cli::run_client(options).expect("run_client should succeed");
@@ -411,4 +412,243 @@ fn test_cli_command_parsing() {
     } else {
         panic!("expected Command::Client");
     }
+
+    // Test --strict-pubkeys flag
+    let cli = Cli::try_parse_from(["pinocchio-idl", "generate", "--strict-pubkeys"]).unwrap();
+    if let Command::Generate { strict_pubkeys, .. } = cli.command {
+        assert!(strict_pubkeys);
+    } else {
+        panic!("expected Command::Generate with strict_pubkeys");
+    }
+}
+
+#[test]
+fn test_custom_discriminators_and_byte_hashes() {
+    let temp_dir = std::env::temp_dir().join(format!(
+        "pinocchio_test_custom_disc_{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir_all(&temp_dir).unwrap();
+
+    let lib_code = r#"
+use pinocchio_idl_macros::{p_state, p_event, p_bytes, p_pubkey, p_instruction};
+
+#[p_state(discriminator = 1)]
+pub struct OrderAccount {
+    pub id: u64,
+    pub hash: [u8; 32],
+    #[p_bytes]
+    pub custom_bytes: [u8; 32],
+    pub maker: [u8; 32],
+}
+
+#[p_state(discriminator = [1, 2, 3, 4])]
+pub struct CustomDiscAccount {
+    pub count: u32,
+}
+
+#[p_state(discriminator = none)]
+pub struct NoDiscAccount {
+    pub val: u8,
+}
+
+#[p_event(discriminator = 42)]
+pub struct TradeExecuted {
+    pub trade_hash: [u8; 32],
+    pub buyer: [u8; 32],
+}
+
+#[p_instruction(
+    id = 0,
+    discriminator = [9, 8, 7, 6],
+    accounts = [
+        payer(signer, mut),
+        order(mut, state = OrderAccount)
+    ],
+    data = [
+        tx_hash: [u8; 32] = data[0..32],
+        recipient: [u8; 32] = data[32..64]
+    ]
+)]
+pub fn process_order(accounts: &mut [AccountView], data: &[u8]) -> ProgramResult {
+    let [payer, order] = accounts else {
+        return Err(ProgramError::NotEnoughAccountKeys);
+    };
+    Ok(())
+}
+"#;
+
+    fs::write(temp_dir.join("lib.rs"), lib_code).unwrap();
+
+    let metadata = pinocchio_idl_core::Metadata {
+        name: "test_disc".to_string(),
+        version: "0.1.0".to_string(),
+        spec: "0.1.0".to_string(),
+        description: "Test discriminator and hash program".to_string(),
+    };
+
+    // 1. Build normal IDL
+    let idl = pinocchio_idl_cli::build_idl(&temp_dir, metadata.clone())
+        .expect("should build IDL successfully");
+
+    // Check account discriminators
+    let order_acc = idl
+        .accounts
+        .iter()
+        .find(|a| a.name == "OrderAccount")
+        .unwrap();
+    assert_eq!(order_acc.discriminator, vec![1]);
+
+    let custom_acc = idl
+        .accounts
+        .iter()
+        .find(|a| a.name == "CustomDiscAccount")
+        .unwrap();
+    assert_eq!(custom_acc.discriminator, vec![1, 2, 3, 4]);
+
+    let no_disc_acc = idl
+        .accounts
+        .iter()
+        .find(|a| a.name == "NoDiscAccount")
+        .unwrap();
+    assert_eq!(no_disc_acc.discriminator, Vec::<u8>::new());
+
+    // Check event discriminator
+    let event = idl
+        .events
+        .iter()
+        .find(|e| e.name == "TradeExecuted")
+        .unwrap();
+    assert_eq!(event.discriminator, vec![42]);
+
+    // Check instruction discriminator
+    let ix = idl
+        .instructions
+        .iter()
+        .find(|i| i.name == "process_order")
+        .unwrap();
+    assert_eq!(ix.discriminator, vec![9, 8, 7, 6]);
+
+    // Check 32-byte hash vs pubkey resolution in OrderAccount
+    let order_type = idl.types.iter().find(|t| t.name == "OrderAccount").unwrap();
+    let hash_field = order_type
+        .r#type
+        .fields
+        .iter()
+        .find(|f| f.name == "hash")
+        .unwrap();
+    assert_eq!(
+        hash_field.r#type,
+        pinocchio_idl_core::FieldType::Array(
+            Box::new(pinocchio_idl_core::FieldType::Simple("u8".to_string())),
+            32
+        )
+    );
+
+    let custom_bytes_field = order_type
+        .r#type
+        .fields
+        .iter()
+        .find(|f| f.name == "custom_bytes")
+        .unwrap();
+    assert_eq!(
+        custom_bytes_field.r#type,
+        pinocchio_idl_core::FieldType::Array(
+            Box::new(pinocchio_idl_core::FieldType::Simple("u8".to_string())),
+            32
+        )
+    );
+
+    let maker_field = order_type
+        .r#type
+        .fields
+        .iter()
+        .find(|f| f.name == "maker")
+        .unwrap();
+    assert_eq!(
+        maker_field.r#type,
+        pinocchio_idl_core::FieldType::Simple("pubkey".to_string())
+    );
+
+    // Check instruction args
+    let tx_hash_arg = ix
+        .args
+        .as_ref()
+        .unwrap()
+        .iter()
+        .find(|a| a.name == "tx_hash")
+        .unwrap();
+    assert_eq!(
+        tx_hash_arg.r#type,
+        pinocchio_idl_core::FieldType::Array(
+            Box::new(pinocchio_idl_core::FieldType::Simple("u8".to_string())),
+            32
+        )
+    );
+
+    let recipient_arg = ix
+        .args
+        .as_ref()
+        .unwrap()
+        .iter()
+        .find(|a| a.name == "recipient")
+        .unwrap();
+    assert_eq!(
+        recipient_arg.r#type,
+        pinocchio_idl_core::FieldType::Simple("pubkey".to_string())
+    );
+
+    // 2. Build with strict_pubkeys option: all [u8; 32] become array of 32
+    let strict_idl = pinocchio_idl_cli::build_idl_with_options(
+        &temp_dir,
+        metadata,
+        pinocchio_idl_cli::BuildOptions {
+            strict_pubkeys: true,
+        },
+    )
+    .expect("should build strict IDL successfully");
+
+    let strict_order_type = strict_idl
+        .types
+        .iter()
+        .find(|t| t.name == "OrderAccount")
+        .unwrap();
+    let strict_maker = strict_order_type
+        .r#type
+        .fields
+        .iter()
+        .find(|f| f.name == "maker")
+        .unwrap();
+    assert_eq!(
+        strict_maker.r#type,
+        pinocchio_idl_core::FieldType::Array(
+            Box::new(pinocchio_idl_core::FieldType::Simple("u8".to_string())),
+            32
+        )
+    );
+
+    // 3. Test Codama JSON generation with custom discriminators
+    let codama_json = pinocchio_idl_core::render::to_codama_json(&idl).unwrap();
+    let codama_val: serde_json::Value = serde_json::from_str(&codama_json).unwrap();
+
+    let accounts_node = codama_val["program"]["accounts"].as_array().unwrap();
+    let order_node = accounts_node
+        .iter()
+        .find(|a| a["name"] == "orderAccount")
+        .unwrap();
+    assert_eq!(
+        order_node["discriminators"][0]["constant"]["value"]["number"],
+        1
+    );
+
+    let no_disc_node = accounts_node
+        .iter()
+        .find(|a| a["name"] == "noDiscAccount")
+        .unwrap();
+    assert_eq!(no_disc_node["discriminators"].as_array().unwrap().len(), 0);
+
+    let _ = fs::remove_dir_all(&temp_dir);
 }

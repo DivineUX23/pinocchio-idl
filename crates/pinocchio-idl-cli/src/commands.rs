@@ -3,7 +3,7 @@ use clap::{Parser, Subcommand, ValueEnum};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use crate::{build_idl, read_metadata};
+use crate::{BuildOptions, build_idl_with_options, read_metadata};
 use pinocchio_idl_core::render;
 
 #[derive(Parser, Debug, Clone)]
@@ -46,6 +46,10 @@ pub enum Command {
         /// Output format: anchor (default) or codama
         #[arg(long, short = 'f', alias = "format", default_value = "anchor")]
         format: OutputFormat,
+
+        /// When enabled, [u8; 32] is preserved as an array/bytes rather than coerced to pubkey
+        #[arg(long)]
+        strict_pubkeys: bool,
     },
     /// Check if the generated IDL matches the existing file
     #[command(alias = "verify")]
@@ -65,6 +69,10 @@ pub enum Command {
         /// Output format: anchor (default) or codama
         #[arg(long, short = 'f', alias = "format", default_value = "anchor")]
         format: OutputFormat,
+
+        /// When enabled, [u8; 32] is preserved as an array/bytes rather than coerced to pubkey
+        #[arg(long)]
+        strict_pubkeys: bool,
     },
     /// Scan the codebase for missing or duplicate IDL annotations
     #[command(alias = "lint", alias = "diagnose")]
@@ -142,6 +150,10 @@ pub enum Command {
         /// Run generation immediately using available JS runtime (default: true unless --no-run or --script-only)
         #[arg(long)]
         run: bool,
+
+        /// When enabled, [u8; 32] is preserved as an array/bytes rather than coerced to pubkey
+        #[arg(long)]
+        strict_pubkeys: bool,
     },
 }
 
@@ -160,6 +172,7 @@ pub fn run(cli: Cli) -> Result<()> {
             out,
             src,
             format,
+            strict_pubkeys,
         } => {
             let start_time = Instant::now();
 
@@ -185,7 +198,7 @@ pub fn run(cli: Cli) -> Result<()> {
                 }
             });
 
-            let idl = build_idl(&src_dir, metadata)
+            let idl = build_idl_with_options(&src_dir, metadata, BuildOptions { strict_pubkeys })
                 .context("IDL generation process failed - check #[p_instruction(...)]")?;
 
             let json = match format {
@@ -217,6 +230,7 @@ pub fn run(cli: Cli) -> Result<()> {
             out,
             src,
             format,
+            strict_pubkeys,
         } => {
             let start_time = Instant::now();
 
@@ -242,7 +256,7 @@ pub fn run(cli: Cli) -> Result<()> {
                 }
             });
 
-            let idl = build_idl(&src_dir, metadata)
+            let idl = build_idl_with_options(&src_dir, metadata, BuildOptions { strict_pubkeys })
                 .context("IDL check process failed - check #[p_instruction(...)]")?;
 
             let generated = match format {
@@ -331,6 +345,7 @@ pub fn run(cli: Cli) -> Result<()> {
             script_only,
             no_run,
             run: _,
+            strict_pubkeys,
         } => {
             let should_run = !no_run && !script_only;
             crate::run_client(crate::ClientOptions {
@@ -340,6 +355,7 @@ pub fn run(cli: Cli) -> Result<()> {
                 package_name,
                 run: should_run,
                 script_only,
+                strict_pubkeys,
             })?;
             Ok(())
         }

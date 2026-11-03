@@ -44,6 +44,21 @@ When developing or annotating Solana programs in this repository, follow these r
       pub status: EscrowStatus,
   }
   ```
+- **Custom discriminators:** Support 1-byte, multi-byte, or 0-byte discriminators using `discriminator = <val>`:
+  ```rust
+  // 1-byte discriminator:
+  #[p_state(inject, discriminator = 1)]
+  pub struct Order { pub id: u64 }
+
+  // Custom multi-byte discriminator:
+  #[p_state(discriminator = [1, 2, 3, 4])]
+  pub struct CustomAccount { pub data: u32 }
+
+  // Zero-byte discriminator (unprefixed raw account):
+  #[p_state(discriminator = none)]
+  pub struct RawAccount { pub value: u64 }
+  ```
+- **32-Byte Hashes vs Pubkeys:** By default, fields named `maker`, `mint`, etc. with `[u8; 32]` or `Pubkey` resolve to `pubkey`. Fields named `hash`, `digest`, `signature`, `merkle_root` or decorated with `#[p_bytes]` / `#[p_hash]` resolve to fixed 32-byte arrays/buffers (`[u8; 32]`). Pass `--strict-pubkeys` on the CLI to preserve all `[u8; 32]` as raw arrays.
 
 ## 3. Events (`#[p_event]`)
 - Annotate event structs with `#[p_event]`.
@@ -55,6 +70,7 @@ When developing or annotating Solana programs in this repository, follow these r
       pub amount: u64,
   }
   ```
+- Custom event discriminators are also supported: `#[p_event(discriminator = 42)]`.
 
 ## 4. Custom Types (`#[p_type]`)
 - Annotate custom enums and structs with `#[p_type]` so they are included in the IDL's `types` / `definedTypes`:

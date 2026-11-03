@@ -15,6 +15,7 @@ pub use helpers::*;
 #[derive(Debug)]
 pub struct Instruction {
     pub id: Option<u8>,
+    pub discriminator: Option<Vec<u8>>,
     pub inject: bool,
     pub accounts: Vec<Account>,
     pub data: Option<Vec<Data>>,
@@ -23,6 +24,7 @@ pub struct Instruction {
 impl Parse for Instruction {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let mut id = None;
+        let mut discriminator = None;
         let mut inject = false;
         let mut accounts = Vec::new();
         let mut data = None;
@@ -34,6 +36,15 @@ impl Parse for Instruction {
                 input.parse::<Token![=]>()?;
                 let lit: LitInt = input.parse()?;
                 id = Some(lit.base10_parse()?);
+            } else if ident == "discriminator" {
+                input.parse::<Token![=]>()?;
+                let expr: syn::Expr = input.parse()?;
+                let spec = parse_discriminator_expr(&expr)?;
+                match spec {
+                    DiscriminatorSpec::Bytes(b) => discriminator = Some(b),
+                    DiscriminatorSpec::None => discriminator = Some(Vec::new()),
+                    DiscriminatorSpec::Default => {}
+                }
             } else if ident == "inject" {
                 inject = true;
             } else if ident == "accounts" {
@@ -110,6 +121,7 @@ impl Parse for Instruction {
 
         Ok(Instruction {
             id,
+            discriminator,
             inject,
             accounts,
             data,
@@ -144,6 +156,16 @@ impl Instruction {
         index: u8,
         docs: Option<Vec<String>>,
     ) -> syn::Result<IdlInstruction> {
+        self.into_idl_with_docs_and_options(name, index, docs, false)
+    }
+
+    pub fn into_idl_with_docs_and_options(
+        &self,
+        name: String,
+        index: u8,
+        docs: Option<Vec<String>>,
+        strict_pubkeys: bool,
+    ) -> syn::Result<IdlInstruction> {
         let account_names: Vec<String> = self.accounts.iter().map(|a| a.name.to_string()).collect();
 
         let arg_names: Vec<String> = self
@@ -164,7 +186,7 @@ impl Instruction {
             .map(|fields| {
                 fields
                     .iter()
-                    .map(Data::into_idl_arg)
+                    .map(|d| d.into_idl_arg_with_context(strict_pubkeys))
                     .collect::<syn::Result<Vec<_>>>()
             })
             .transpose()?;
@@ -172,7 +194,10 @@ impl Instruction {
         Ok(IdlInstruction {
             name,
             docs,
-            discriminator: vec![self.id.unwrap_or(index)],
+            discriminator: self
+                .discriminator
+                .clone()
+                .unwrap_or_else(|| vec![self.id.unwrap_or(index)]),
             accounts,
             args,
         })

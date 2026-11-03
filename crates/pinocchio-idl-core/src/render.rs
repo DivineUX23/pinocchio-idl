@@ -60,18 +60,31 @@ fn codama_root(idl: &Idl) -> Value {
 fn codama_event(event: &crate::IdlEvent, ty: &IdlTypeDefinition) -> Value {
     let discriminator_bytes = &event.discriminator;
 
-    let fields: Vec<Value> = std::iter::once(codama_discriminator_field(discriminator_bytes))
-        .chain(ty.r#type.fields.iter().map(codama_struct_field))
-        .collect();
+    let fields: Vec<Value> = if discriminator_bytes.is_empty() {
+        ty.r#type.fields.iter().map(codama_struct_field).collect()
+    } else {
+        std::iter::once(codama_discriminator_field(discriminator_bytes))
+            .chain(ty.r#type.fields.iter().map(codama_struct_field))
+            .collect()
+    };
 
-    json!({
-        "kind": "eventNode",
-        "name": camel_case(&event.name),
-        "data": {
-            "kind": "structTypeNode",
-            "fields": fields,
-        },
-        "discriminators": [{
+    let discriminators = if discriminator_bytes.is_empty() {
+        json!([])
+    } else if discriminator_bytes.len() == 1 {
+        json!([{
+            "kind": "constantDiscriminatorNode",
+            "offset": 0,
+            "constant": {
+                "kind": "constantValueNode",
+                "type": number_type("u8"),
+                "value": {
+                    "kind": "numberValueNode",
+                    "number": discriminator_bytes[0]
+                }
+            }
+        }])
+    } else {
+        json!([{
             "kind": "constantDiscriminatorNode",
             "offset": 0,
             "constant": {
@@ -89,7 +102,17 @@ fn codama_event(event: &crate::IdlEvent, ty: &IdlTypeDefinition) -> Value {
                     })).collect::<Vec<_>>()
                 }
             }
-        }]
+        }])
+    };
+
+    json!({
+        "kind": "eventNode",
+        "name": camel_case(&event.name),
+        "data": {
+            "kind": "structTypeNode",
+            "fields": fields,
+        },
+        "discriminators": discriminators
     })
 }
 
@@ -162,18 +185,31 @@ fn codama_defined_type(ty: &IdlTypeDefinition) -> Value {
 fn codama_account(account: &crate::IdlAccountDef, ty: &IdlTypeDefinition) -> Value {
     let discriminator_bytes = &account.discriminator;
 
-    let fields: Vec<Value> = std::iter::once(codama_discriminator_field(discriminator_bytes))
-        .chain(ty.r#type.fields.iter().map(codama_struct_field))
-        .collect();
+    let fields: Vec<Value> = if discriminator_bytes.is_empty() {
+        ty.r#type.fields.iter().map(codama_struct_field).collect()
+    } else {
+        std::iter::once(codama_discriminator_field(discriminator_bytes))
+            .chain(ty.r#type.fields.iter().map(codama_struct_field))
+            .collect()
+    };
 
-    let mut node = json!({
-        "kind": "accountNode",
-        "name": camel_case(&account.name),
-        "data": {
-            "kind": "structTypeNode",
-            "fields": fields,
-        },
-        "discriminators": [{
+    let discriminators = if discriminator_bytes.is_empty() {
+        json!([])
+    } else if discriminator_bytes.len() == 1 {
+        json!([{
+            "kind": "constantDiscriminatorNode",
+            "offset": 0,
+            "constant": {
+                "kind": "constantValueNode",
+                "type": number_type("u8"),
+                "value": {
+                    "kind": "numberValueNode",
+                    "number": discriminator_bytes[0],
+                },
+            },
+        }])
+    } else {
+        json!([{
             "kind": "constantDiscriminatorNode",
             "offset": 0,
             "constant": {
@@ -185,7 +221,17 @@ fn codama_account(account: &crate::IdlAccountDef, ty: &IdlTypeDefinition) -> Val
                     "encoding": "base16",
                 },
             },
-        }],
+        }])
+    };
+
+    let mut node = json!({
+        "kind": "accountNode",
+        "name": camel_case(&account.name),
+        "data": {
+            "kind": "structTypeNode",
+            "fields": fields,
+        },
+        "discriminators": discriminators,
     });
 
     if let Some(docs) = &account.docs {
@@ -198,8 +244,22 @@ fn codama_account(account: &crate::IdlAccountDef, ty: &IdlTypeDefinition) -> Val
 fn codama_instruction(instruction: &IdlInstruction) -> Value {
     let discriminator_bytes = &instruction.discriminator;
     let args = instruction.args.as_deref().unwrap_or(&[]);
-    let mut arguments = vec![codama_discriminator_argument(discriminator_bytes)];
+    let mut arguments = if discriminator_bytes.is_empty() {
+        Vec::new()
+    } else {
+        vec![codama_discriminator_argument(discriminator_bytes)]
+    };
     arguments.extend(args.iter().map(codama_instruction_argument));
+
+    let discriminators = if discriminator_bytes.is_empty() {
+        json!([])
+    } else {
+        json!([{
+            "kind": "fieldDiscriminatorNode",
+            "name": "discriminator",
+            "offset": 0,
+        }])
+    };
 
     let mut node = json!({
         "kind": "instructionNode",
@@ -207,11 +267,7 @@ fn codama_instruction(instruction: &IdlInstruction) -> Value {
         "optionalAccountStrategy": "omitted",
         "accounts": instruction.accounts.iter().map(|acc| codama_instruction_account(acc, args)).collect::<Vec<_>>(),
         "arguments": arguments,
-        "discriminators": [{
-            "kind": "fieldDiscriminatorNode",
-            "name": "discriminator",
-            "offset": 0,
-        }],
+        "discriminators": discriminators,
     });
 
     if let Some(docs) = &instruction.docs {

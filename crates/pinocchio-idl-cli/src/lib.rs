@@ -10,7 +10,7 @@ pub mod manifest;
 pub use client::{ClientOptions, run_client};
 pub use commands::{Cli, Command, OutputFormat, run as run_cli};
 pub use discover::{DiscoveredInstruction, Discovery, discover};
-pub use idl_build::{build_idl, write_idl};
+pub use idl_build::{BuildOptions, build_idl, build_idl_with_options, write_idl};
 pub use init::run_init;
 pub use init_agents::run_init_agents;
 pub use manifest::read_metadata;

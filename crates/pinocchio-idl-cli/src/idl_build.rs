@@ -5,11 +5,16 @@ use syn::{Fields, Item, ItemConst, ItemEnum, ItemStruct, Lit};
 use anyhow::Context;
 use pinocchio_idl_core::{
     Idl, IdlAccountDef, IdlConstant, IdlEnumVariant, IdlError, IdlField, IdlType,
-    IdlTypeDefinition, Instruction, Metadata, account_discriminator, derive_instruction_name,
-    extract_docs, find_accounts_param, rust_to_idl,
+    IdlTypeDefinition, Instruction, Metadata, derive_instruction_name, extract_discriminator_spec,
+    extract_docs, extract_strict_pubkeys, find_accounts_param, rust_to_idl, rust_to_idl_with_field,
 };
 
 use crate::discover::discover;
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct BuildOptions {
+    pub strict_pubkeys: bool,
+}
 
 fn format_syn_error(err: syn::Error, file: &Path) -> anyhow::Error {
     let msgs: Vec<String> = err
@@ -22,9 +27,14 @@ fn format_syn_error(err: syn::Error, file: &Path) -> anyhow::Error {
     anyhow::anyhow!("{}", msgs.join("\n"))
 }
 
-fn state_to_idl(item: &ItemStruct) -> syn::Result<(IdlAccountDef, IdlTypeDefinition)> {
+fn state_to_idl(
+    item: &ItemStruct,
+    options: &BuildOptions,
+) -> syn::Result<(IdlAccountDef, IdlTypeDefinition)> {
     let name = item.ident.to_string();
     let docs = extract_docs(&item.attrs);
+    let disc_spec = extract_discriminator_spec(&item.attrs, "p_state");
+    let is_strict = options.strict_pubkeys || extract_strict_pubkeys(&item.attrs, "p_state");
 
     let fields = match &item.fields {
         Fields::Named(named) => named
@@ -40,7 +50,7 @@ fn state_to_idl(item: &ItemStruct) -> syn::Result<(IdlAccountDef, IdlTypeDefinit
                 Ok(IdlField {
                     name: field_name,
                     docs: extract_docs(&f.attrs),
-                    r#type: rust_to_idl(&f.ty)?,
+                    r#type: rust_to_idl_with_field(f, is_strict)?,
                 })
             })
             .collect::<syn::Result<Vec<_>>>()?,
@@ -56,7 +66,7 @@ fn state_to_idl(item: &ItemStruct) -> syn::Result<(IdlAccountDef, IdlTypeDefinit
         IdlAccountDef {
             name: name.clone(),
             docs: docs.clone(),
-            discriminator: account_discriminator(&name).to_vec(),
+            discriminator: disc_spec.to_account_bytes(&name),
         },
         IdlTypeDefinition {
             name,
@@ -72,9 +82,12 @@ fn state_to_idl(item: &ItemStruct) -> syn::Result<(IdlAccountDef, IdlTypeDefinit
 
 fn event_to_idl(
     item: &ItemStruct,
+    options: &BuildOptions,
 ) -> syn::Result<(pinocchio_idl_core::IdlEvent, IdlTypeDefinition)> {
     let name = item.ident.to_string();
     let docs = extract_docs(&item.attrs);
+    let disc_spec = extract_discriminator_spec(&item.attrs, "p_event");
+    let is_strict = options.strict_pubkeys || extract_strict_pubkeys(&item.attrs, "p_event");
 
     let fields = match &item.fields {
         Fields::Named(named) => named
@@ -90,7 +103,7 @@ fn event_to_idl(
                 Ok(IdlField {
                     name: field_name,
                     docs: extract_docs(&f.attrs),
-                    r#type: rust_to_idl(&f.ty)?,
+                    r#type: rust_to_idl_with_field(f, is_strict)?,
                 })
             })
             .collect::<syn::Result<Vec<_>>>()?,
@@ -105,7 +118,7 @@ fn event_to_idl(
     Ok((
         pinocchio_idl_core::IdlEvent {
             name: name.clone(),
-            discriminator: pinocchio_idl_core::event_discriminator(&name).to_vec(),
+            discriminator: disc_spec.to_event_bytes(&name),
         },
         IdlTypeDefinition {
             name,
@@ -119,11 +132,12 @@ fn event_to_idl(
     ))
 }
 
-pub fn type_item_to_idl(item: &Item) -> syn::Result<IdlTypeDefinition> {
+pub fn type_item_to_idl(item: &Item, options: &BuildOptions) -> syn::Result<IdlTypeDefinition> {
     match item {
         Item::Struct(s) => {
             let name = s.ident.to_string();
             let docs = extract_docs(&s.attrs);
+            let is_strict = options.strict_pubkeys || extract_strict_pubkeys(&s.attrs, "p_type");
 
             let fields = match &s.fields {
                 Fields::Named(named) => named
@@ -139,7 +153,7 @@ pub fn type_item_to_idl(item: &Item) -> syn::Result<IdlTypeDefinition> {
                         Ok(IdlField {
                             name: field_name,
                             docs: extract_docs(&f.attrs),
-                            r#type: rust_to_idl(&f.ty)?,
+                            r#type: rust_to_idl_with_field(f, is_strict)?,
                         })
                     })
                     .collect::<syn::Result<Vec<_>>>()?,
@@ -164,6 +178,7 @@ pub fn type_item_to_idl(item: &Item) -> syn::Result<IdlTypeDefinition> {
         Item::Enum(e) => {
             let name = e.ident.to_string();
             let docs = extract_docs(&e.attrs);
+            let is_strict = options.strict_pubkeys || extract_strict_pubkeys(&e.attrs, "p_type");
 
             let mut variants = Vec::new();
             for variant in &e.variants {
@@ -182,7 +197,7 @@ pub fn type_item_to_idl(item: &Item) -> syn::Result<IdlTypeDefinition> {
                                 Ok(IdlField {
                                     name: f_name,
                                     docs: extract_docs(&f.attrs),
-                                    r#type: rust_to_idl(&f.ty)?,
+                                    r#type: rust_to_idl_with_field(f, is_strict)?,
                                 })
                             })
                             .collect::<syn::Result<Vec<_>>>()?;
@@ -197,7 +212,7 @@ pub fn type_item_to_idl(item: &Item) -> syn::Result<IdlTypeDefinition> {
                                 Ok(IdlField {
                                     name: format!("field{i}"),
                                     docs: extract_docs(&f.attrs),
-                                    r#type: rust_to_idl(&f.ty)?,
+                                    r#type: rust_to_idl_with_field(f, is_strict)?,
                                 })
                             })
                             .collect::<syn::Result<Vec<_>>>()?;
@@ -373,6 +388,14 @@ fn constant_from_item(item: &ItemConst) -> syn::Result<IdlConstant> {
 }
 
 pub fn build_idl(src_dir: &Path, metadata: Metadata) -> anyhow::Result<Idl> {
+    build_idl_with_options(src_dir, metadata, BuildOptions::default())
+}
+
+pub fn build_idl_with_options(
+    src_dir: &Path,
+    metadata: Metadata,
+    options: BuildOptions,
+) -> anyhow::Result<Idl> {
     let discovery = discover(src_dir).map_err(|e| anyhow::anyhow!("Discovery error: {}", e))?;
 
     if discovery.instructions.is_empty()
@@ -400,7 +423,7 @@ pub fn build_idl(src_dir: &Path, metadata: Metadata) -> anyhow::Result<Idl> {
             let name = derive_instruction_name(&discovered.func.sig.ident);
             let docs = extract_docs(&discovered.func.attrs);
             instruction
-                .into_idl_with_docs(name, index as u8, docs)
+                .into_idl_with_docs_and_options(name, index as u8, docs, options.strict_pubkeys)
                 .map_err(|e| format_syn_error(e, &discovered.file))
         })
         .collect::<anyhow::Result<Vec<_>>>()?;
@@ -408,7 +431,7 @@ pub fn build_idl(src_dir: &Path, metadata: Metadata) -> anyhow::Result<Idl> {
     let (accounts, mut types): (Vec<_>, Vec<_>) = discovery
         .states
         .iter()
-        .map(|(s, file)| state_to_idl(s).map_err(|e| format_syn_error(e, file)))
+        .map(|(s, file)| state_to_idl(s, &options).map_err(|e| format_syn_error(e, file)))
         .collect::<anyhow::Result<Vec<_>>>()?
         .into_iter()
         .unzip();
@@ -416,7 +439,7 @@ pub fn build_idl(src_dir: &Path, metadata: Metadata) -> anyhow::Result<Idl> {
     let (events, event_types): (Vec<_>, Vec<_>) = discovery
         .events
         .iter()
-        .map(|(e, file)| event_to_idl(e).map_err(|err| format_syn_error(err, file)))
+        .map(|(e, file)| event_to_idl(e, &options).map_err(|err| format_syn_error(err, file)))
         .collect::<anyhow::Result<Vec<_>>>()?
         .into_iter()
         .unzip();
@@ -426,7 +449,9 @@ pub fn build_idl(src_dir: &Path, metadata: Metadata) -> anyhow::Result<Idl> {
     let custom_types: Vec<IdlTypeDefinition> = discovery
         .types
         .iter()
-        .map(|(item, file)| type_item_to_idl(item).map_err(|err| format_syn_error(err, file)))
+        .map(|(item, file)| {
+            type_item_to_idl(item, &options).map_err(|err| format_syn_error(err, file))
+        })
         .collect::<anyhow::Result<Vec<_>>>()?;
 
     types.extend(custom_types);

@@ -458,7 +458,7 @@ dependencies = [
 
 [[package]]
 name = "pinocchio-idl"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "anyhow",
  "cargo_toml",
@@ -475,7 +475,7 @@ dependencies = [
 
 [[package]]
 name = "pinocchio-idl-core"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "bs58",
  "proc-macro2",
@@ -488,7 +488,7 @@ dependencies = [
 
 [[package]]
 name = "pinocchio-idl-macros"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "pinocchio 0.11.2",
  "pinocchio-idl-core",

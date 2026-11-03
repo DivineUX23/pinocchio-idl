@@ -1,7 +1,7 @@
 extern crate proc_macro;
 use pinocchio_idl_core::{
-    DataSlice, Instruction, account_discriminator, classify_seed, count_account_binding,
-    find_accounts_param,
+    DataSlice, DiscriminatorSpec, Instruction, account_discriminator, classify_seed,
+    count_account_binding, find_accounts_param, parse_discriminator_expr,
 };
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
@@ -308,23 +308,44 @@ pub fn p_instruction(attr: TokenStream, item: TokenStream) -> TokenStream {
 
 #[proc_macro_attribute]
 pub fn p_state(attr: TokenStream, item: TokenStream) -> TokenStream {
-    let item_struct = parse_macro_input!(item as ItemStruct);
+    let mut item_struct = parse_macro_input!(item as ItemStruct);
+    let struct_name = &item_struct.ident;
 
     let mut is_inject = false;
+    let mut disc_spec = DiscriminatorSpec::Default;
 
-    let attr_parser = syn::meta::parser(|meta| {
-        if meta.path.is_ident("inject") {
-            is_inject = true;
-            Ok(())
-        } else {
-            Err(syn::Error::new_spanned(
-                &meta.path,
-                "unsupported #[p_state] attribute argument - inject is the only supported argument.",
-            ))
-        }
-    });
+    if !attr.is_empty() {
+        let attr_parser = syn::meta::parser(|meta| {
+            if meta.path.is_ident("inject") {
+                is_inject = true;
+                Ok(())
+            } else if meta.path.is_ident("discriminator") {
+                let value = meta.value()?;
+                let expr: syn::Expr = value.parse()?;
+                disc_spec = parse_discriminator_expr(&expr)?;
+                Ok(())
+            } else if meta.path.is_ident("strict_pubkeys") || meta.path.is_ident("preserve_arrays")
+            {
+                Ok(())
+            } else {
+                Err(syn::Error::new_spanned(
+                    &meta.path,
+                    "unsupported #[p_state] attribute argument; supported arguments: `inject`, `discriminator = <val>`, `strict_pubkeys`",
+                ))
+            }
+        });
 
-    parse_macro_input!(attr with attr_parser);
+        parse_macro_input!(attr with attr_parser);
+    }
+
+    for field in &mut item_struct.fields {
+        field.attrs.retain(|attr| {
+            !attr.path().is_ident("p_bytes")
+                && !attr.path().is_ident("p_hash")
+                && !attr.path().is_ident("p_array")
+                && !attr.path().is_ident("p_pubkey")
+        });
+    }
 
     if !is_inject {
         return TokenStream::from(quote! {
@@ -332,32 +353,34 @@ pub fn p_state(attr: TokenStream, item: TokenStream) -> TokenStream {
         });
     }
 
-    /*
-    let fields = match &item_struct.fields {
-        Fields::Named(named) => &named.named,
-        _ => {
-            return syn::Error::new_spanned(
-                &item_struct,
-                "#[p_state] requires a struct with named fields",
-            )
-            .to_compile_error()
-            .into();
+    let disc_tokens = match disc_spec {
+        DiscriminatorSpec::Default => {
+            let discriminator = account_discriminator(&struct_name.to_string());
+            let disc_bytes = discriminator.iter().map(|b| quote! { #b });
+            quote! {
+                pub const DISCRIMINATOR: [u8; 8] = [#(#disc_bytes),*];
+            }
+        }
+        DiscriminatorSpec::None => {
+            quote! {
+                pub const DISCRIMINATOR: [u8; 0] = [];
+            }
+        }
+        DiscriminatorSpec::Bytes(ref bytes) if bytes.len() == 1 => {
+            let b = bytes[0];
+            quote! {
+                pub const DISCRIMINATOR: u8 = #b;
+                pub const DISCRIMINATOR_BYTES: [u8; 1] = [#b];
+            }
+        }
+        DiscriminatorSpec::Bytes(ref bytes) => {
+            let len = bytes.len();
+            let disc_bytes = bytes.iter().map(|b| quote! { #b });
+            quote! {
+                pub const DISCRIMINATOR: [u8; #len] = [#(#disc_bytes),*];
+            }
         }
     };
-
-
-    let mut space: usize = 0;
-    for field in fields {
-        space += match field_byte_size(&field.ty) {
-            Ok(s) => s,
-            Err(e) => return e.to_compile_error().into(),
-        };
-    }
-    */
-
-    let struct_name = &item_struct.ident;
-    let discriminator = account_discriminator(&struct_name.to_string());
-    let disc_bytes = discriminator.iter().map(|b| quote! { #b });
 
     TokenStream::from(quote! {
         #[repr(C)]
@@ -365,7 +388,7 @@ pub fn p_state(attr: TokenStream, item: TokenStream) -> TokenStream {
 
         impl #struct_name {
             pub const SPACE: usize = std::mem::size_of::<Self>();
-            pub const DISCRIMINATOR: [u8; 8] = [#(#disc_bytes),*];
+            #disc_tokens
         }
     })
 }
@@ -389,29 +412,73 @@ pub fn p_constant(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
 #[proc_macro_attribute]
 pub fn p_type(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    item
+    use syn::Item;
+    let mut parsed_item = parse_macro_input!(item as Item);
+    match &mut parsed_item {
+        Item::Struct(s) => {
+            for field in &mut s.fields {
+                field.attrs.retain(|attr| {
+                    !attr.path().is_ident("p_bytes")
+                        && !attr.path().is_ident("p_hash")
+                        && !attr.path().is_ident("p_array")
+                        && !attr.path().is_ident("p_pubkey")
+                });
+            }
+        }
+        Item::Enum(e) => {
+            for variant in &mut e.variants {
+                for field in &mut variant.fields {
+                    field.attrs.retain(|attr| {
+                        !attr.path().is_ident("p_bytes")
+                            && !attr.path().is_ident("p_hash")
+                            && !attr.path().is_ident("p_array")
+                            && !attr.path().is_ident("p_pubkey")
+                    });
+                }
+            }
+        }
+        _ => {}
+    }
+    TokenStream::from(quote! { #parsed_item })
 }
 
 #[proc_macro_attribute]
 pub fn p_event(attr: TokenStream, item: TokenStream) -> TokenStream {
-    let item_struct = parse_macro_input!(item as syn::ItemStruct);
+    let mut item_struct = parse_macro_input!(item as syn::ItemStruct);
     let struct_name = &item_struct.ident;
 
     let mut is_inject = false;
+    let mut disc_spec = DiscriminatorSpec::Default;
 
-    let attr_parser = syn::meta::parser(|meta| {
-        if meta.path.is_ident("inject") {
-            is_inject = true;
-            Ok(())
-        } else {
-            Err(syn::Error::new_spanned(
-                &meta.path,
-                "unsupported #[p_event] attribute argument - inject is the only supported argument.",
-            ))
-        }
-    });
+    if !attr.is_empty() {
+        let attr_parser = syn::meta::parser(|meta| {
+            if meta.path.is_ident("inject") {
+                is_inject = true;
+                Ok(())
+            } else if meta.path.is_ident("discriminator") {
+                let value = meta.value()?;
+                let expr: syn::Expr = value.parse()?;
+                disc_spec = parse_discriminator_expr(&expr)?;
+                Ok(())
+            } else {
+                Err(syn::Error::new_spanned(
+                    &meta.path,
+                    "unsupported #[p_event] attribute argument; supported arguments: `inject`, `discriminator = <val>`",
+                ))
+            }
+        });
 
-    parse_macro_input!(attr with attr_parser);
+        parse_macro_input!(attr with attr_parser);
+    }
+
+    for field in &mut item_struct.fields {
+        field.attrs.retain(|attr| {
+            !attr.path().is_ident("p_bytes")
+                && !attr.path().is_ident("p_hash")
+                && !attr.path().is_ident("p_array")
+                && !attr.path().is_ident("p_pubkey")
+        });
+    }
 
     if !is_inject {
         return TokenStream::from(quote! {
@@ -419,8 +486,34 @@ pub fn p_event(attr: TokenStream, item: TokenStream) -> TokenStream {
         });
     }
 
-    let discriminator = pinocchio_idl_core::event_discriminator(&struct_name.to_string());
-    let disc_bytes = discriminator.iter().map(|b| quote! { #b });
+    let disc_tokens = match disc_spec {
+        DiscriminatorSpec::Default => {
+            let discriminator = pinocchio_idl_core::event_discriminator(&struct_name.to_string());
+            let disc_bytes = discriminator.iter().map(|b| quote! { #b });
+            quote! {
+                pub const DISCRIMINATOR: [u8; 8] = [#(#disc_bytes),*];
+            }
+        }
+        DiscriminatorSpec::None => {
+            quote! {
+                pub const DISCRIMINATOR: [u8; 0] = [];
+            }
+        }
+        DiscriminatorSpec::Bytes(ref bytes) if bytes.len() == 1 => {
+            let b = bytes[0];
+            quote! {
+                pub const DISCRIMINATOR: u8 = #b;
+                pub const DISCRIMINATOR_BYTES: [u8; 1] = [#b];
+            }
+        }
+        DiscriminatorSpec::Bytes(ref bytes) => {
+            let len = bytes.len();
+            let disc_bytes = bytes.iter().map(|b| quote! { #b });
+            quote! {
+                pub const DISCRIMINATOR: [u8; #len] = [#(#disc_bytes),*];
+            }
+        }
+    };
 
     TokenStream::from(quote! {
         #[repr(C)]
@@ -428,7 +521,27 @@ pub fn p_event(attr: TokenStream, item: TokenStream) -> TokenStream {
 
         impl #struct_name {
             pub const SPACE: usize = std::mem::size_of::<Self>();
-            pub const DISCRIMINATOR: [u8; 8] = [#(#disc_bytes),*];
+            #disc_tokens
         }
     })
+}
+
+#[proc_macro_attribute]
+pub fn p_bytes(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    item
+}
+
+#[proc_macro_attribute]
+pub fn p_hash(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    item
+}
+
+#[proc_macro_attribute]
+pub fn p_array(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    item
+}
+
+#[proc_macro_attribute]
+pub fn p_pubkey(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    item
 }

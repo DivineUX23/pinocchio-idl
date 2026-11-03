@@ -5,7 +5,7 @@ use std::process::Command as ProcessCommand;
 
 use pinocchio_idl_core::render;
 
-use crate::{build_idl, read_metadata};
+use crate::{BuildOptions, build_idl_with_options, read_metadata};
 
 pub struct ClientOptions {
     pub manifest_path: PathBuf,
@@ -14,6 +14,7 @@ pub struct ClientOptions {
     pub package_name: Option<String>,
     pub run: bool,
     pub script_only: bool,
+    pub strict_pubkeys: bool,
 }
 
 pub fn run_client(options: ClientOptions) -> Result<PathBuf> {
@@ -48,8 +49,14 @@ pub fn run_client(options: ClientOptions) -> Result<PathBuf> {
         src_dir.display()
     );
 
-    let idl = build_idl(&src_dir, metadata.clone())
-        .context("IDL generation process failed - check #[p_instruction(...)]")?;
+    let idl = build_idl_with_options(
+        &src_dir,
+        metadata.clone(),
+        BuildOptions {
+            strict_pubkeys: options.strict_pubkeys,
+        },
+    )
+    .context("IDL generation process failed - check #[p_instruction(...)]")?;
 
     let codama_json =
         render::to_codama_json(&idl).context("Failed to serialize IDL to Codama rootNode JSON")?;

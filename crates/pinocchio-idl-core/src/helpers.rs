@@ -101,9 +101,17 @@ impl Parse for Data {
 
 impl Data {
     pub fn into_idl_arg(&self) -> syn::Result<IdlArg> {
+        self.into_idl_arg_with_context(false)
+    }
+
+    pub fn into_idl_arg_with_context(&self, strict_pubkeys: bool) -> syn::Result<IdlArg> {
         Ok(IdlArg {
             name: self.name.to_string(),
-            r#type: rust_to_idl(&self.ty)?,
+            r#type: rust_to_idl_with_context(
+                &self.ty,
+                Some(&self.name.to_string()),
+                strict_pubkeys,
+            )?,
         })
     }
 }
@@ -116,6 +124,158 @@ pub struct State {
 pub struct Fields {
     pub name: Ident,
     pub ty: Type,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DiscriminatorSpec {
+    Default,
+    None,
+    Bytes(Vec<u8>),
+}
+
+impl DiscriminatorSpec {
+    pub fn to_account_bytes(&self, struct_name: &str) -> Vec<u8> {
+        match self {
+            DiscriminatorSpec::Default => account_discriminator(struct_name).to_vec(),
+            DiscriminatorSpec::None => Vec::new(),
+            DiscriminatorSpec::Bytes(b) => b.clone(),
+        }
+    }
+
+    pub fn to_event_bytes(&self, struct_name: &str) -> Vec<u8> {
+        match self {
+            DiscriminatorSpec::Default => event_discriminator(struct_name).to_vec(),
+            DiscriminatorSpec::None => Vec::new(),
+            DiscriminatorSpec::Bytes(b) => b.clone(),
+        }
+    }
+}
+
+pub fn parse_discriminator_expr(expr: &syn::Expr) -> syn::Result<DiscriminatorSpec> {
+    match expr {
+        syn::Expr::Lit(syn::ExprLit {
+            lit: syn::Lit::Int(n),
+            ..
+        }) => {
+            let val = n.base10_parse::<u64>()?;
+            if val <= 255 {
+                Ok(DiscriminatorSpec::Bytes(vec![val as u8]))
+            } else {
+                let bytes = val.to_le_bytes();
+                let len = bytes.iter().rposition(|&b| b != 0).map_or(1, |pos| pos + 1);
+                Ok(DiscriminatorSpec::Bytes(bytes[..len].to_vec()))
+            }
+        }
+        syn::Expr::Lit(syn::ExprLit {
+            lit: syn::Lit::ByteStr(bs),
+            ..
+        }) => Ok(DiscriminatorSpec::Bytes(bs.value())),
+        syn::Expr::Lit(syn::ExprLit {
+            lit: syn::Lit::Str(s),
+            ..
+        }) => Ok(DiscriminatorSpec::Bytes(s.value().into_bytes())),
+        syn::Expr::Array(syn::ExprArray { elems, .. }) => {
+            if elems.is_empty() {
+                return Ok(DiscriminatorSpec::None);
+            }
+            let mut bytes = Vec::new();
+            for elem in elems {
+                match elem {
+                    syn::Expr::Lit(syn::ExprLit {
+                        lit: syn::Lit::Int(lit),
+                        ..
+                    }) => {
+                        bytes.push(lit.base10_parse::<u8>()?);
+                    }
+                    syn::Expr::Lit(syn::ExprLit {
+                        lit: syn::Lit::Byte(b),
+                        ..
+                    }) => {
+                        bytes.push(b.value());
+                    }
+                    other => {
+                        return Err(syn::Error::new_spanned(
+                            other,
+                            "discriminator array elements must be integer or byte literals",
+                        ));
+                    }
+                }
+            }
+            Ok(DiscriminatorSpec::Bytes(bytes))
+        }
+        syn::Expr::Path(p) if p.path.is_ident("none") => Ok(DiscriminatorSpec::None),
+        other => Err(syn::Error::new_spanned(
+            other,
+            "unsupported discriminator expression; expected integer (e.g. 1), byte array (e.g. [1, 2, 3, 4]), string/bytes (e.g. b\"PORT\"), or `none`",
+        )),
+    }
+}
+
+pub fn extract_discriminator_spec(attrs: &[syn::Attribute], attr_name: &str) -> DiscriminatorSpec {
+    for attr in attrs {
+        if attr.path().is_ident(attr_name) {
+            if let syn::Meta::List(meta_list) = &attr.meta {
+                let mut spec = DiscriminatorSpec::Default;
+                let _ = meta_list.parse_nested_meta(|nested| {
+                    if nested.path.is_ident("discriminator") {
+                        if let Ok(value) = nested.value() {
+                            if let Ok(expr) = value.parse::<syn::Expr>() {
+                                if let Ok(parsed) = parse_discriminator_expr(&expr) {
+                                    spec = parsed;
+                                }
+                            }
+                        }
+                    }
+                    Ok(())
+                });
+                return spec;
+            }
+        }
+    }
+    DiscriminatorSpec::Default
+}
+
+pub fn extract_strict_pubkeys(attrs: &[syn::Attribute], attr_name: &str) -> bool {
+    for attr in attrs {
+        if attr.path().is_ident(attr_name) {
+            if let syn::Meta::List(meta_list) = &attr.meta {
+                let mut strict = false;
+                let _ = meta_list.parse_nested_meta(|nested| {
+                    if nested.path.is_ident("strict_pubkeys")
+                        || nested.path.is_ident("preserve_arrays")
+                    {
+                        strict = true;
+                    }
+                    Ok(())
+                });
+                if strict {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+pub fn is_hash_field_name(name: &str) -> bool {
+    let lower = name.to_lowercase();
+    lower == "hash"
+        || lower.ends_with("_hash")
+        || lower.starts_with("hash_")
+        || lower == "digest"
+        || lower.ends_with("_digest")
+        || lower.starts_with("digest_")
+        || lower == "signature"
+        || lower.ends_with("_signature")
+        || lower.starts_with("sig_")
+        || lower == "merkle_root"
+        || lower.ends_with("_root")
+        || lower == "salt"
+        || lower == "secret"
+        || lower.ends_with("_bytes")
+        || lower.starts_with("bytes_")
+        || lower == "bytes"
+        || lower == "payload"
 }
 
 pub fn account_discriminator(struct_name: &str) -> [u8; 8] {
@@ -187,6 +347,14 @@ pub fn derive_instruction_name(ident: &Ident) -> String {
 }
 
 pub fn rust_to_idl(ty: &Type) -> syn::Result<FieldType> {
+    rust_to_idl_with_context(ty, None, false)
+}
+
+pub fn rust_to_idl_with_context(
+    ty: &Type,
+    field_name: Option<&str>,
+    strict_pubkeys: bool,
+) -> syn::Result<FieldType> {
     match ty {
         Type::Path(p) => {
             let last_seg = p
@@ -199,12 +367,12 @@ pub fn rust_to_idl(ty: &Type) -> syn::Result<FieldType> {
             match ident.as_str() {
                 "Vec" => {
                     let inner = extract_arg(p, "Vec")?;
-                    let inner_type = rust_to_idl(inner)?;
+                    let inner_type = rust_to_idl_with_context(inner, field_name, strict_pubkeys)?;
                     return Ok(FieldType::Vec(Box::new(inner_type)));
                 }
                 "Option" => {
                     let inner = extract_arg(p, "Option")?;
-                    let inner_type = rust_to_idl(inner)?;
+                    let inner_type = rust_to_idl_with_context(inner, field_name, strict_pubkeys)?;
                     return Ok(FieldType::Option(Box::new(inner_type)));
                 }
                 _ => {}
@@ -219,7 +387,7 @@ pub fn rust_to_idl(ty: &Type) -> syn::Result<FieldType> {
         }
 
         Type::Array(arr) => {
-            let elem_type = rust_to_idl(&arr.elem)?;
+            let elem_type = rust_to_idl_with_context(&arr.elem, field_name, strict_pubkeys)?;
             let len = match &arr.len {
                 syn::Expr::Lit(syn::ExprLit {
                     lit: syn::Lit::Int(n),
@@ -234,16 +402,21 @@ pub fn rust_to_idl(ty: &Type) -> syn::Result<FieldType> {
             };
 
             if elem_type == FieldType::Simple("u8".to_string()) && len == 32 {
-                Ok(FieldType::Simple("pubkey".to_string()))
+                let is_hash = field_name.is_some_and(is_hash_field_name);
+                if strict_pubkeys || is_hash {
+                    Ok(FieldType::Array(Box::new(elem_type), len))
+                } else {
+                    Ok(FieldType::Simple("pubkey".to_string()))
+                }
             } else {
                 Ok(FieldType::Array(Box::new(elem_type), len))
             }
         }
 
-        Type::Reference(r) => rust_to_idl(&r.elem),
+        Type::Reference(r) => rust_to_idl_with_context(&r.elem, field_name, strict_pubkeys),
 
         Type::Slice(s) => {
-            let inner = rust_to_idl(&s.elem)?;
+            let inner = rust_to_idl_with_context(&s.elem, field_name, strict_pubkeys)?;
             if inner == FieldType::Simple("u8".to_string()) {
                 Ok(FieldType::Simple("bytes".to_string()))
             } else {
@@ -255,6 +428,28 @@ pub fn rust_to_idl(ty: &Type) -> syn::Result<FieldType> {
             other,
             "unsupported data type in #[p_instruction(...)], #[p_state] or #[p_constant], use a primitive, `Pubkey`, `Address`, `Vec<T>`, `Option<T>`, &T, [T], or [T; N]",
         )),
+    }
+}
+
+pub fn rust_to_idl_with_field(field: &syn::Field, strict_pubkeys: bool) -> syn::Result<FieldType> {
+    let has_bytes_attr = field.attrs.iter().any(|attr| {
+        attr.path().is_ident("p_bytes")
+            || attr.path().is_ident("p_hash")
+            || attr.path().is_ident("p_array")
+    });
+    let has_pubkey_attr = field
+        .attrs
+        .iter()
+        .any(|attr| attr.path().is_ident("p_pubkey"));
+
+    let field_name = field.ident.as_ref().map(|i| i.to_string());
+
+    if has_pubkey_attr {
+        Ok(FieldType::Simple("pubkey".to_string()))
+    } else if has_bytes_attr {
+        rust_to_idl_with_context(&field.ty, field_name.as_deref(), true)
+    } else {
+        rust_to_idl_with_context(&field.ty, field_name.as_deref(), strict_pubkeys)
     }
 }
 

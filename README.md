@@ -95,7 +95,7 @@ cargo pinocchio-idl --version
 ```toml
 # Cargo.toml
 [dependencies]
-pinocchio-idl-macros = "0.1.2"
+pinocchio-idl-macros = "0.1.3"
 ```
 
 #### Step 3 - Annotate and generate
@@ -216,7 +216,7 @@ Add `pinocchio-idl-macros` to the program's `Cargo.toml`:
 
 ```toml
 [dependencies]
-pinocchio-idl-macros = "0.1.2"
+pinocchio-idl-macros = "0.1.3"
 ```
 
 ---
@@ -249,6 +249,46 @@ impl Escrow {
     pub const DISCRIMINATOR: [u8; 8] = [31, 213, 123, 187, 186, 22, 218, 155];
 }
 ```
+
+##### Configurable Discriminators (1-Byte, Multi-Byte, or None)
+
+In addition to Anchor's default 8-byte SHA-256 discriminator, `#[p_state]` supports custom discriminator widths:
+
+```rust
+// 1-byte discriminator (common in Shank and native Pinocchio programs):
+#[p_state(inject, discriminator = 1)]
+pub struct OrderAccount {
+    pub id: u64,
+}
+// Expands to: pub const DISCRIMINATOR: u8 = 1;
+
+// Custom multi-byte discriminator:
+#[p_state(discriminator = [1, 2, 3, 4])]
+pub struct CustomAccount {
+    pub count: u32,
+}
+
+// 0-byte discriminator (unprefixed raw account):
+#[p_state(discriminator = none)]
+pub struct RawAccount {
+    pub value: u64,
+}
+```
+
+##### 32-Byte Hashes vs Public Keys
+
+Solana programs frequently use `[u8; 32]` for cryptographic hashes (SHA-256, Merkle roots, sequence numbers), not just public keys.
+- **Auto Hash Detection**: Any `[u8; 32]` field named `hash`, `digest`, `signature`, `merkle_root`, `salt`, `secret`, `bytes`, or `payload` is automatically emitted as `[u8; 32]` in the IDL (and `fixedSizeTypeNode` bytes in Codama).
+- **Field Attributes**: Annotate any field with `#[p_bytes]` or `#[p_hash]` to explicitly force `[u8; 32]` array output:
+  ```rust
+  #[p_state]
+  pub struct TransferPayload {
+      #[p_bytes]
+      pub emitter_address: [u8; 32],
+      pub recipient: Pubkey,
+  }
+  ```
+- **CLI Flag `--strict-pubkeys`**: Run `pinocchio-idl generate --strict-pubkeys` to strictly preserve all `[u8; 32]` as byte arrays across the entire program without changing any source code.
 
 #### `#[p_event]` - Event Struct
 
