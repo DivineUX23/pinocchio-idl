@@ -112,10 +112,8 @@ impl ::core::fmt::Debug for FeeConfig {
     fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
         ::core::fmt::Formatter::debug_struct_field2_finish(
             f,
-            "FeeConfig",
-            "maker_fee_bps",
+            "FeeConfig maker_fee_bps referral_bps",
             &self.maker_fee_bps,
-            "referral_bps",
             &&self.referral_bps,
         )
     }

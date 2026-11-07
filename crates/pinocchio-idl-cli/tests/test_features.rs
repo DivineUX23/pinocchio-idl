@@ -700,12 +700,16 @@ pub fn make_escrow(accounts: &[pinocchio::AccountView], data: &[u8]) -> pinocchi
         spec: "0.1.0".to_string(),
         description: "pda bump test".to_string(),
     };
-    let idl = pinocchio_idl_cli::build_idl(&src_dir, metadata)
-        .expect("should build IDL successfully");
+    let idl =
+        pinocchio_idl_cli::build_idl(&src_dir, metadata).expect("should build IDL successfully");
 
     // 1. Verify in Anchor IDL, the escrow PDA has seeds: ["escrow", maker, seed] (bump stripped)
     let make_ix = &idl.instructions[0];
-    let escrow_acc = make_ix.accounts.iter().find(|a| a.name == "escrow").unwrap();
+    let escrow_acc = make_ix
+        .accounts
+        .iter()
+        .find(|a| a.name == "escrow")
+        .unwrap();
     let pda = escrow_acc.pda.as_ref().expect("escrow should have pda");
     assert_eq!(pda.seeds.len(), 3, "bump should be stripped from IDL seeds");
 
@@ -715,7 +719,11 @@ pub fn make_escrow(accounts: &[pinocchio::AccountView], data: &[u8]) -> pinocchi
     let pdas = codama_val["program"]["pdas"].as_array().unwrap();
     let escrow_pda = pdas.iter().find(|p| p["name"] == "escrow").unwrap();
     let seeds = escrow_pda["seeds"].as_array().unwrap();
-    assert_eq!(seeds.len(), 3, "Codama pdaNode should not include trailing bump seed");
+    assert_eq!(
+        seeds.len(),
+        3,
+        "Codama pdaNode should not include trailing bump seed"
+    );
 
     let _ = fs::remove_dir_all(&temp_dir);
 }
@@ -750,8 +758,14 @@ pub fn ix_two(accounts: &[pinocchio::AccountView], data: &[u8]) -> pinocchio::Pr
     fs::write(src_dir.join("lib.rs"), lib_code).unwrap();
 
     let report = pinocchio_idl_cli::doctor::run_doctor(&src_dir).unwrap();
-    let duplicate_finding = report.findings.iter().find(|f| f.message.contains("duplicate instruction id `0`"));
-    assert!(duplicate_finding.is_some(), "Doctor should report duplicate instruction numeric ID");
+    let duplicate_finding = report
+        .findings
+        .iter()
+        .find(|f| f.message.contains("duplicate instruction id `0`"));
+    assert!(
+        duplicate_finding.is_some(),
+        "Doctor should report duplicate instruction numeric ID"
+    );
 
     let _ = fs::remove_dir_all(&temp_dir);
 }
